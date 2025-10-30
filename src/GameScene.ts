@@ -179,7 +179,8 @@ export default class GameScene extends Phaser.Scene {
         const possibleColors = []
         for (let color of gems) {
           cell.color = color
-          if (!this.shouldExplode(cell)) {
+          // Check for both 3+ matches AND 2x2 squares
+          if (!this.shouldExplode(cell) && !this.wouldCreate2x2Square(cell)) {
             possibleColors.push(color)
           }
         }
@@ -1319,6 +1320,58 @@ export default class GameScene extends Phaser.Scene {
       return false
     }
     return this.shouldExplodeHorizontally(cell) || this.shouldExplodeVertically(cell)
+  }
+
+  wouldCreate2x2Square (cell: Cell): boolean {
+    // Check if placing this cell would create a 2x2 square
+    // Only check cells that have been filled already (during board initialization)
+    const { row, column, color } = cell
+
+    // Check if cell is top-left of a 2x2 square
+    if (row < size - 1 && column < size - 1) {
+      const topRight = this.board[row][column + 1]
+      const bottomLeft = this.board[row + 1][column]
+      const bottomRight = this.board[row + 1][column + 1]
+      if (!topRight.empty && !bottomLeft.empty && !bottomRight.empty &&
+          topRight.color === color && bottomLeft.color === color && bottomRight.color === color) {
+        return true
+      }
+    }
+
+    // Check if cell is top-right of a 2x2 square
+    if (row < size - 1 && column > 0) {
+      const topLeft = this.board[row][column - 1]
+      const bottomLeft = this.board[row + 1][column - 1]
+      const bottomRight = this.board[row + 1][column]
+      if (!topLeft.empty && !bottomLeft.empty && !bottomRight.empty &&
+          topLeft.color === color && bottomLeft.color === color && bottomRight.color === color) {
+        return true
+      }
+    }
+
+    // Check if cell is bottom-left of a 2x2 square
+    if (row > 0 && column < size - 1) {
+      const topLeft = this.board[row - 1][column]
+      const topRight = this.board[row - 1][column + 1]
+      const bottomRight = this.board[row][column + 1]
+      if (!topLeft.empty && !topRight.empty && !bottomRight.empty &&
+          topLeft.color === color && topRight.color === color && bottomRight.color === color) {
+        return true
+      }
+    }
+
+    // Check if cell is bottom-right of a 2x2 square
+    if (row > 0 && column > 0) {
+      const topLeft = this.board[row - 1][column - 1]
+      const topRight = this.board[row - 1][column]
+      const bottomLeft = this.board[row][column - 1]
+      if (!topLeft.empty && !topRight.empty && !bottomLeft.empty &&
+          topLeft.color === color && topRight.color === color && bottomLeft.color === color) {
+        return true
+      }
+    }
+
+    return false
   }
 
   shouldExplodeHorizontally ({ row, column }: Cell): boolean {
