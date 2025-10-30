@@ -77,6 +77,9 @@ export default class GameScene extends Phaser.Scene {
 
     this.createBackground()
 
+    // Create particle texture
+    this.createParticleTexture()
+
     this.initBoard()
 
     this.setScore(0)
@@ -139,6 +142,15 @@ export default class GameScene extends Phaser.Scene {
       .setFillStyle(0x16213e, 0.8)
       .setAltFillStyle(0x0f3460, 0.8)
       .setOutlineStyle(0x533483, 0.5)
+  }
+
+  createParticleTexture () {
+    // Create a simple white circle texture for particles
+    const graphics = this.add.graphics()
+    graphics.fillStyle(0xffffff, 1)
+    graphics.fillCircle(8, 8, 8)
+    graphics.generateTexture('particle', 16, 16)
+    graphics.destroy()
   }
 
   initBoard () {
@@ -485,6 +497,9 @@ export default class GameScene extends Phaser.Scene {
         powerUpCell.sprite = this.add.sprite(x, y, powerUpType)
           .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
           .setInteractive()
+
+        // Create power-up creation burst effect
+        this.createPowerUpBurst(x, y, powerUpType)
       }
     }
 
@@ -492,6 +507,31 @@ export default class GameScene extends Phaser.Scene {
     if (powerUpsCreated) {
       this.sound.play('booster-created', { volume: 0.5 })
     }
+  }
+
+  createPowerUpBurst (x: number, y: number, powerUpType: PowerUpType) {
+    // Color based on power-up type
+    let color = 0xffff00 // default yellow
+    if (powerUpType === 'light-ball') {
+      color = 0xffffff // white/rainbow
+    } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
+      color = 0xff9900 // orange
+    }
+
+    // Create burst effect
+    const particles = this.add.particles(x, y, 'particle', {
+      speed: { min: 100, max: 250 },
+      scale: { start: 0.5, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 600,
+      quantity: 20,
+      tint: color,
+      blendMode: 'ADD',
+      angle: { min: 0, max: 360 }
+    })
+
+    // Auto-destroy after particles fade
+    this.time.delayedCall(700, () => particles.destroy())
   }
 
   activatePowerUps (chains: Cell[][]) {
@@ -538,6 +578,11 @@ export default class GameScene extends Phaser.Scene {
     } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
       this.sound.play('rocket', { volume: 0.4 })
     }
+
+    // Create power-up activation effects
+    const x = cell.column * CELL_SIZE + CELL_SIZE / 2
+    const y = cell.row * CELL_SIZE + CELL_SIZE / 2
+    this.createPowerUpEffect(x, y, powerUpType, cell)
 
     // Clear the power-up property and mark for destruction
     cell.powerup = null
@@ -594,6 +639,53 @@ export default class GameScene extends Phaser.Scene {
           }
         }
         break
+    }
+  }
+
+  createPowerUpEffect (x: number, y: number, powerUpType: PowerUpType, cell: Cell) {
+    if (powerUpType === 'horizontal-rocket') {
+      // Create horizontal laser effect
+      for (let col = 0; col < size; col++) {
+        const particleX = col * CELL_SIZE + CELL_SIZE / 2
+        const particles = this.add.particles(particleX, y, 'particle', {
+          speed: { min: 50, max: 100 },
+          scale: { start: 0.4, end: 0 },
+          alpha: { start: 1, end: 0 },
+          lifespan: 300,
+          quantity: 5,
+          tint: 0xff6600,
+          blendMode: 'ADD'
+        })
+        this.time.delayedCall(400, () => particles.destroy())
+      }
+    } else if (powerUpType === 'vertical-rocket') {
+      // Create vertical laser effect
+      for (let row = 0; row < size; row++) {
+        const particleY = row * CELL_SIZE + CELL_SIZE / 2
+        const particles = this.add.particles(x, particleY, 'particle', {
+          speed: { min: 50, max: 100 },
+          scale: { start: 0.4, end: 0 },
+          alpha: { start: 1, end: 0 },
+          lifespan: 300,
+          quantity: 5,
+          tint: 0xff6600,
+          blendMode: 'ADD'
+        })
+        this.time.delayedCall(400, () => particles.destroy())
+      }
+    } else if (powerUpType === 'light-ball') {
+      // Create massive rainbow explosion
+      const particles = this.add.particles(x, y, 'particle', {
+        speed: { min: 150, max: 400 },
+        scale: { start: 0.8, end: 0 },
+        alpha: { start: 1, end: 0 },
+        lifespan: 800,
+        quantity: 50,
+        tint: [0xff0000, 0xff9900, 0xffff00, 0x00ff00, 0x0099ff, 0x9900ff],
+        blendMode: 'ADD',
+        angle: { min: 0, max: 360 }
+      })
+      this.time.delayedCall(900, () => particles.destroy())
     }
   }
 
@@ -743,6 +835,9 @@ export default class GameScene extends Phaser.Scene {
     return new Promise<void>(resolve => {
       cell.empty = true
 
+      // Create particle explosion
+      this.createGemParticles(cell)
+
       // Simple pop: scale up slightly and fade out quickly
       this.tweens.add({
         targets: cell.sprite,
@@ -753,6 +848,37 @@ export default class GameScene extends Phaser.Scene {
         onComplete: () => resolve()
       })
     })
+  }
+
+  createGemParticles (cell: Cell) {
+    const x = cell.column * CELL_SIZE + CELL_SIZE / 2
+    const y = cell.row * CELL_SIZE + CELL_SIZE / 2
+
+    // Get color based on gem type
+    const colorMap: { [key: string]: number } = {
+      blue: 0x4da6ff,
+      green: 0x4dff4d,
+      orange: 0xffaa4d,
+      red: 0xff4d4d,
+      white: 0xffffff,
+      yellow: 0xffff4d
+    }
+
+    const color = colorMap[cell.color] || 0xffffff
+
+    // Create particle emitter
+    const particles = this.add.particles(x, y, 'particle', {
+      speed: { min: 50, max: 150 },
+      scale: { start: 0.3, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 400,
+      quantity: 8,
+      tint: color,
+      blendMode: 'ADD'
+    })
+
+    // Auto-destroy after particles fade
+    this.time.delayedCall(500, () => particles.destroy())
   }
 
   getCellsToDestroy (): Cell[] {
