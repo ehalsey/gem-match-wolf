@@ -829,7 +829,14 @@ export default class GameScene extends Phaser.Scene {
             const targetRow = cell.row + dir.dr
             const targetCol = cell.column + dir.dc
             if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
-              this.board[targetRow][targetCol].empty = true
+              const targetCell = this.board[targetRow][targetCol]
+              // Chain-activate any power-ups hit by the starting explosion
+              if (targetCell.powerup) {
+                console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}] from fly-away start`)
+                this.triggerPowerUp(targetCell)
+              } else {
+                targetCell.empty = true
+              }
             }
           }
 
