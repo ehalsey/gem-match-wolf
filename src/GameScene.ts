@@ -456,7 +456,7 @@ export default class GameScene extends Phaser.Scene {
         targets: scoreText,
         y: y - 80,
         alpha: 0,
-        duration: 1000,
+        duration: 1500,
         ease: 'Cubic.easeOut',
         onComplete: () => scoreText.destroy()
       })
