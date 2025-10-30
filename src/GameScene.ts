@@ -60,6 +60,15 @@ export default class GameScene extends Phaser.Scene {
     this.load.image('vertical-rocket', 'assets/vertical-rocket.png')
     this.load.image('tnt', 'assets/tnt.png')
     this.load.image('light-ball', 'assets/light-ball.png')
+
+    // Load sound effects
+    this.load.audio('swap', 'assets/sounds/SwapForward.mp3')
+    this.load.audio('swap-back', 'assets/sounds/SwapBackWardSound.mp3')
+    this.load.audio('match', 'assets/sounds/MatchSound.mp3')
+    this.load.audio('explode', 'assets/sounds/MatchItemExplodeSound.mp3')
+    this.load.audio('booster-created', 'assets/sounds/BoosterCreationSound.mp3')
+    this.load.audio('rocket', 'assets/sounds/Rocket.mp3')
+    this.load.audio('light-ball-sound', 'assets/sounds/LightBallPoweringEffect.wav')
   }
 
   create () {
@@ -241,6 +250,7 @@ export default class GameScene extends Phaser.Scene {
     this.moveInProgress = true
 
     this.swapCells(firstCell, secondCell)
+    this.sound.play('swap', { volume: 0.3 })
 
     await this.moveSpritesWhereTheyBelong()
 
@@ -308,6 +318,8 @@ export default class GameScene extends Phaser.Scene {
         this.gameOver('No more moves!')
       }
     } else {
+      // Invalid move - swap back and play error sound
+      this.sound.play('swap-back', { volume: 0.3 })
       this.swapCells(firstCell, secondCell)
       await this.moveSpritesWhereTheyBelong()
     }
@@ -426,8 +438,12 @@ export default class GameScene extends Phaser.Scene {
   }
 
   createPowerUpsFromChains (chains: Cell[][]) {
+    let powerUpsCreated = false
+
     for (const chain of chains) {
       if (chain.length >= 4) {
+        powerUpsCreated = true
+
         // Determine if chain is horizontal or vertical
         const isHorizontal = chain[0].row === chain[1].row
 
@@ -471,6 +487,11 @@ export default class GameScene extends Phaser.Scene {
           .setInteractive()
       }
     }
+
+    // Play booster creation sound if any power-ups were created
+    if (powerUpsCreated) {
+      this.sound.play('booster-created', { volume: 0.5 })
+    }
   }
 
   activatePowerUps (chains: Cell[][]) {
@@ -511,23 +532,45 @@ export default class GameScene extends Phaser.Scene {
 
     const powerUpType = cell.powerup
 
+    // Play sound based on power-up type
+    if (powerUpType === 'light-ball') {
+      this.sound.play('light-ball-sound', { volume: 0.4 })
+    } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
+      this.sound.play('rocket', { volume: 0.4 })
+    }
+
     // Clear the power-up property and mark for destruction
     cell.powerup = null
     cell.empty = true
 
     // Mark additional cells based on power-up type
+    // Also chain-activate any power-ups we hit
     switch (powerUpType) {
       case 'horizontal-rocket':
         // Destroy entire row
         for (let col = 0; col < size; col++) {
-          this.board[cell.row][col].empty = true
+          const targetCell = this.board[cell.row][col]
+          // Chain-activate any power-ups in the row
+          if (targetCell.powerup && targetCell !== cell) {
+            console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+            this.triggerPowerUp(targetCell)
+          } else {
+            targetCell.empty = true
+          }
         }
         break
 
       case 'vertical-rocket':
         // Destroy entire column
         for (let row = 0; row < size; row++) {
-          this.board[row][cell.column].empty = true
+          const targetCell = this.board[row][cell.column]
+          // Chain-activate any power-ups in the column
+          if (targetCell.powerup && targetCell !== cell) {
+            console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+            this.triggerPowerUp(targetCell)
+          } else {
+            targetCell.empty = true
+          }
         }
         break
 
@@ -537,8 +580,15 @@ export default class GameScene extends Phaser.Scene {
         if (targetColor) {
           for (let row = 0; row < size; row++) {
             for (let col = 0; col < size; col++) {
-              if (this.board[row][col].color === targetColor) {
-                this.board[row][col].empty = true
+              const targetCell = this.board[row][col]
+              if (targetCell.color === targetColor) {
+                // Chain-activate any power-ups of matching color
+                if (targetCell.powerup) {
+                  console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+                  this.triggerPowerUp(targetCell)
+                } else {
+                  targetCell.empty = true
+                }
               }
             }
           }
@@ -678,6 +728,11 @@ export default class GameScene extends Phaser.Scene {
 
   async destroyCells () {
     const cellsToDestroy = this.getCellsToDestroy()
+
+    // Play explosion sound if we're destroying cells
+    if (cellsToDestroy.length > 0) {
+      this.sound.play('explode', { volume: 0.3 })
+    }
 
     await Promise.all(
       cellsToDestroy.map(cell => this.destroyCell(cell))
