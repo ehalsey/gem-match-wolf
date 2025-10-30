@@ -17,7 +17,7 @@ const gems = [
   'yellow'
 ]
 
-type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'light-ball' | null
+type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'light-ball' | 'fly-away' | null
 
 /**
  * Number of cells required to trigger an explosion
@@ -60,6 +60,7 @@ export default class GameScene extends Phaser.Scene {
     this.load.image('vertical-rocket', 'assets/vertical-rocket.png')
     this.load.image('tnt', 'assets/tnt.png')
     this.load.image('light-ball', 'assets/light-ball.png')
+    this.load.image('fly-away', 'assets/fly-away.png')
 
     // Load sound effects
     this.load.audio('swap', 'assets/sounds/SwapForward.mp3')
@@ -449,10 +450,144 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  detectSpecialPatterns (): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
+    const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> = []
+    const usedCells = new Set<Cell>()
+
+    // Detect 2x2 squares for Fly Away
+    for (let row = 0; row < size - 1; row++) {
+      for (let col = 0; col < size - 1; col++) {
+        const topLeft = this.board[row][col]
+        const topRight = this.board[row][col + 1]
+        const bottomLeft = this.board[row + 1][col]
+        const bottomRight = this.board[row + 1][col + 1]
+
+        const squareCells = [topLeft, topRight, bottomLeft, bottomRight]
+        if (squareCells.some(cell => usedCells.has(cell))) continue
+
+        // Check if all 4 cells match and aren't empty or power-ups
+        if (
+          !topLeft.empty && !topLeft.powerup &&
+          topLeft.color === topRight.color &&
+          topLeft.color === bottomLeft.color &&
+          topLeft.color === bottomRight.color
+        ) {
+          // Found a 2x2 square! Create fly-away at top-left
+          patterns.push({
+            cell: topLeft,
+            type: 'fly-away',
+            cells: squareCells
+          })
+          squareCells.forEach(cell => usedCells.add(cell))
+        }
+      }
+    }
+
+    // Detect L-shapes for TNT (all 4 orientations)
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const center = this.board[row][col]
+        if (center.empty || center.powerup || usedCells.has(center)) continue
+
+        // L-shape 1: └ (right and up)
+        if (col <= size - 3 && row >= 2) {
+          const right1 = this.board[row][col + 1]
+          const right2 = this.board[row][col + 2]
+          const up1 = this.board[row - 1][col]
+          const up2 = this.board[row - 2][col]
+          const lCells = [center, right1, right2, up1, up2]
+
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
+              lCells.every(c => !usedCells.has(c))) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells })
+            lCells.forEach(cell => usedCells.add(cell))
+            continue
+          }
+        }
+
+        // L-shape 2: ┘ (left and up)
+        if (col >= 2 && row >= 2) {
+          const left1 = this.board[row][col - 1]
+          const left2 = this.board[row][col - 2]
+          const up1 = this.board[row - 1][col]
+          const up2 = this.board[row - 2][col]
+          const lCells = [center, left1, left2, up1, up2]
+
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
+              lCells.every(c => !usedCells.has(c))) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells })
+            lCells.forEach(cell => usedCells.add(cell))
+            continue
+          }
+        }
+
+        // L-shape 3: ┌ (right and down)
+        if (col <= size - 3 && row <= size - 3) {
+          const right1 = this.board[row][col + 1]
+          const right2 = this.board[row][col + 2]
+          const down1 = this.board[row + 1][col]
+          const down2 = this.board[row + 2][col]
+          const lCells = [center, right1, right2, down1, down2]
+
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
+              lCells.every(c => !usedCells.has(c))) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells })
+            lCells.forEach(cell => usedCells.add(cell))
+            continue
+          }
+        }
+
+        // L-shape 4: ┐ (left and down)
+        if (col >= 2 && row <= size - 3) {
+          const left1 = this.board[row][col - 1]
+          const left2 = this.board[row][col - 2]
+          const down1 = this.board[row + 1][col]
+          const down2 = this.board[row + 2][col]
+          const lCells = [center, left1, left2, down1, down2]
+
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
+              lCells.every(c => !usedCells.has(c))) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells })
+            lCells.forEach(cell => usedCells.add(cell))
+            continue
+          }
+        }
+      }
+    }
+
+    return patterns
+  }
+
   createPowerUpsFromChains (chains: Cell[][]) {
     let powerUpsCreated = false
 
+    // First, check for special patterns (L-shapes and 2x2 squares)
+    const specialPatterns = this.detectSpecialPatterns()
+
+    for (const pattern of specialPatterns) {
+      powerUpsCreated = true
+      const powerUpCell = pattern.cell
+      const powerUpType = pattern.type
+
+      // Mark all cells in pattern for destruction except the power-up cell
+      for (const cell of pattern.cells) {
+        if (cell !== powerUpCell) {
+          cell.empty = true
+        }
+      }
+
+      // Create the power-up
+      this.createPowerUp(powerUpCell, powerUpType)
+    }
+
+    // Then handle regular linear chains
     for (const chain of chains) {
+      // Skip chains that are part of special patterns
+      const isPartOfSpecialPattern = specialPatterns.some(pattern =>
+        pattern.cells.some(cell => chain.includes(cell))
+      )
+      if (isPartOfSpecialPattern) continue
+
       if (chain.length >= 4) {
         powerUpsCreated = true
 
@@ -480,26 +615,8 @@ export default class GameScene extends Phaser.Scene {
           }
         }
 
-        // Mark the power-up cell - this prevents it from being destroyed
-        powerUpCell.powerup = powerUpType
-
-        // Change color to prevent matching with regular gems
-        powerUpCell.color = powerUpType
-
-        // Replace the sprite with the power-up sprite
-        const x = powerUpCell.column * CELL_SIZE + CELL_SIZE / 2
-        const y = powerUpCell.row * CELL_SIZE + CELL_SIZE / 2
-
-        // Destroy the old sprite
-        powerUpCell.sprite.destroy()
-
-        // Create new power-up sprite
-        powerUpCell.sprite = this.add.sprite(x, y, powerUpType)
-          .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
-          .setInteractive()
-
-        // Create power-up creation burst effect
-        this.createPowerUpBurst(x, y, powerUpType)
+        // Create the power-up
+        this.createPowerUp(powerUpCell, powerUpType)
       }
     }
 
@@ -507,6 +624,29 @@ export default class GameScene extends Phaser.Scene {
     if (powerUpsCreated) {
       this.sound.play('booster-created', { volume: 0.5 })
     }
+  }
+
+  createPowerUp (powerUpCell: Cell, powerUpType: PowerUpType) {
+    // Mark the power-up cell - this prevents it from being destroyed
+    powerUpCell.powerup = powerUpType
+
+    // Change color to prevent matching with regular gems
+    powerUpCell.color = powerUpType
+
+    // Replace the sprite with the power-up sprite
+    const x = powerUpCell.column * CELL_SIZE + CELL_SIZE / 2
+    const y = powerUpCell.row * CELL_SIZE + CELL_SIZE / 2
+
+    // Destroy the old sprite
+    powerUpCell.sprite.destroy()
+
+    // Create new power-up sprite
+    powerUpCell.sprite = this.add.sprite(x, y, powerUpType)
+      .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+      .setInteractive()
+
+    // Create power-up creation burst effect
+    this.createPowerUpBurst(x, y, powerUpType)
   }
 
   createPowerUpBurst (x: number, y: number, powerUpType: PowerUpType) {
@@ -577,6 +717,10 @@ export default class GameScene extends Phaser.Scene {
       this.sound.play('light-ball-sound', { volume: 0.4 })
     } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
       this.sound.play('rocket', { volume: 0.4 })
+    } else if (powerUpType === 'tnt') {
+      this.sound.play('explode', { volume: 0.5 })
+    } else if (powerUpType === 'fly-away') {
+      this.sound.play('rocket', { volume: 0.4 })
     }
 
     // Create power-up activation effects
@@ -639,7 +783,89 @@ export default class GameScene extends Phaser.Scene {
           }
         }
         break
+
+      case 'tnt':
+        // Destroy in a cross pattern (4 directions, 1 cell each)
+        const directions = [
+          { dr: -1, dc: 0 },  // up
+          { dr: 1, dc: 0 },   // down
+          { dr: 0, dc: -1 },  // left
+          { dr: 0, dc: 1 }    // right
+        ]
+        for (const dir of directions) {
+          const targetRow = cell.row + dir.dr
+          const targetCol = cell.column + dir.dc
+          if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+            const targetCell = this.board[targetRow][targetCol]
+            if (targetCell.powerup) {
+              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+              this.triggerPowerUp(targetCell)
+            } else {
+              targetCell.empty = true
+            }
+          }
+        }
+        break
+
+      case 'fly-away':
+        // Find best target to fly to, explode at start, fly, explode at end
+        const bestTarget = this.findBestFlyAwayTarget(cell)
+        if (bestTarget) {
+          // First explosion at current position (cross pattern)
+          for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
+            const targetRow = cell.row + dir.dr
+            const targetCol = cell.column + dir.dc
+            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+              this.board[targetRow][targetCol].empty = true
+            }
+          }
+
+          // Animate fly-away sprite to target (will implement animation separately)
+          console.log(`Fly-away from [${cell.row}, ${cell.column}] to [${bestTarget.row}, ${bestTarget.column}]`)
+
+          // Second explosion at target position (cross pattern)
+          for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
+            const targetRow = bestTarget.row + dir.dr
+            const targetCol = bestTarget.column + dir.dc
+            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+              const targetCell = this.board[targetRow][targetCol]
+              if (targetCell.powerup) {
+                console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+                this.triggerPowerUp(targetCell)
+              } else {
+                targetCell.empty = true
+              }
+            }
+          }
+          // Mark best target itself for destruction
+          bestTarget.empty = true
+        }
+        break
     }
+  }
+
+  findBestFlyAwayTarget (fromCell: Cell): Cell | null {
+    // Find the cell with the most matches (best strategic value)
+    let bestCell: Cell | null = null
+    let bestScore = 0
+
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (cell.empty || cell.powerup || cell === fromCell) continue
+
+        // Count how many neighbors match this cell's color
+        const neighbors = this.getNeighbors(cell)
+        const matchCount = neighbors.filter(n => !n.empty && !n.powerup && n.color === cell.color).length
+
+        if (matchCount > bestScore) {
+          bestScore = matchCount
+          bestCell = cell
+        }
+      }
+    }
+
+    return bestCell
   }
 
   createPowerUpEffect (x: number, y: number, powerUpType: PowerUpType, cell: Cell) {
@@ -686,6 +912,42 @@ export default class GameScene extends Phaser.Scene {
         angle: { min: 0, max: 360 }
       })
       this.time.delayedCall(900, () => particles.destroy())
+    } else if (powerUpType === 'tnt') {
+      // Create TNT cross explosion (4 directional bursts)
+      const directions = [
+        { angle: 270, y: -1 },  // up
+        { angle: 90, y: 1 },    // down
+        { angle: 180, x: -1 },  // left
+        { angle: 0, x: 1 }      // right
+      ]
+      for (const dir of directions) {
+        const offsetX = (dir.x || 0) * CELL_SIZE / 2
+        const offsetY = (dir.y || 0) * CELL_SIZE / 2
+        const particles = this.add.particles(x + offsetX, y + offsetY, 'particle', {
+          speed: { min: 100, max: 200 },
+          scale: { start: 0.6, end: 0 },
+          alpha: { start: 1, end: 0 },
+          lifespan: 500,
+          quantity: 15,
+          tint: [0xff6600, 0xff9900, 0xffcc00],
+          blendMode: 'ADD',
+          angle: { min: dir.angle - 30, max: dir.angle + 30 }
+        })
+        this.time.delayedCall(600, () => particles.destroy())
+      }
+    } else if (powerUpType === 'fly-away') {
+      // Create fly-away missile trail effect
+      const particles = this.add.particles(x, y, 'particle', {
+        speed: { min: 50, max: 150 },
+        scale: { start: 0.5, end: 0 },
+        alpha: { start: 1, end: 0 },
+        lifespan: 600,
+        quantity: 20,
+        tint: [0x00ccff, 0x00ffff, 0xffffff],
+        blendMode: 'ADD',
+        angle: { min: 0, max: 360 }
+      })
+      this.time.delayedCall(700, () => particles.destroy())
     }
   }
 
