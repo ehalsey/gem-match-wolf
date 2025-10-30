@@ -37,6 +37,7 @@ export default class GameScene extends Phaser.Scene {
   selectedCell: Cell
   moveInProgress: boolean
   score: number
+  moves: number
   zone: Phaser.GameObjects.Zone
   isGameOver: boolean
   gameOverScreen: Phaser.GameObjects.Container
@@ -61,6 +62,7 @@ export default class GameScene extends Phaser.Scene {
     this.initBoard()
 
     this.setScore(0)
+    this.setMoves(30)
 
     // TODO: clicking on "new game" triggers this...
     this.input.on('pointerdown', this.onPointerDown, this)
@@ -86,6 +88,11 @@ export default class GameScene extends Phaser.Scene {
     this.destroyBoard()
     this.initBoard()
     this.setScore(0)
+    this.setMoves(30)
+    if (this.gameOverScreen) {
+      this.gameOverScreen.destroy()
+      this.gameOverScreen = null
+    }
   }
 
   destroyBoard () {
@@ -93,6 +100,16 @@ export default class GameScene extends Phaser.Scene {
   }
 
   createBackground () {
+    // Add gradient background
+    const bg = this.add.rectangle(
+      BOARD_SIZE / 2,
+      BOARD_SIZE / 2,
+      BOARD_SIZE,
+      BOARD_SIZE,
+      0x1a1a2e
+    )
+
+    // Add checkerboard pattern with softer colors
     this.add.grid(
       BOARD_SIZE / 2, // x
       BOARD_SIZE / 2, // y
@@ -101,9 +118,9 @@ export default class GameScene extends Phaser.Scene {
       CELL_SIZE, // cellWidth
       CELL_SIZE // cellHeight
     )
-      .setFillStyle(0x252e38)
-      .setAltFillStyle(0x212933)
-      .setOutlineStyle()
+      .setFillStyle(0x16213e, 0.8)
+      .setAltFillStyle(0x0f3460, 0.8)
+      .setOutlineStyle(0x533483, 0.5)
   }
 
   initBoard () {
@@ -135,6 +152,18 @@ export default class GameScene extends Phaser.Scene {
   setScore (score: number) {
     this.score = score
     this.registry.set('score', score)
+  }
+
+  setMoves (moves: number) {
+    this.moves = moves
+    this.registry.set('moves', moves)
+  }
+
+  decrementMoves () {
+    this.setMoves(this.moves - 1)
+    if (this.moves <= 0) {
+      this.gameOver('Out of moves!')
+    }
   }
 
   async onPointerDown (pointer: Phaser.Input.Pointer) {
@@ -175,6 +204,9 @@ export default class GameScene extends Phaser.Scene {
     await this.moveSpritesWhereTheyBelong()
 
     if (this.boardShouldExplode()) {
+      // Valid move - decrement moves counter
+      this.decrementMoves()
+
       let cascades = 0
       while (this.boardShouldExplode()) {
         const chains = this.getExplodingChains()
@@ -194,7 +226,7 @@ export default class GameScene extends Phaser.Scene {
       const winningMoves = this.getWinningMoves()
       console.log(`${winningMoves.length} winning moves`)
       if (winningMoves.length === 0) {
-        this.gameOver()
+        this.gameOver('No more moves!')
       }
     } else {
       this.swapCells(firstCell, secondCell)
@@ -232,27 +264,43 @@ export default class GameScene extends Phaser.Scene {
     return winningMoves
   }
 
-  gameOver () {
+  gameOver (message: string = 'Game Over') {
     this.isGameOver = true
 
     const gameOverBackground = this.add.rectangle(0, 0, this.zone.width, this.zone.height)
       .setOrigin(0)
-      .setFillStyle(0x000000, 0.5)
+      .setFillStyle(0x000000, 0.8)
 
-    const gameOverText = this.add.text(0, 0, 'Game over')
+    const gameOverTitle = this.add.text(0, -50, message)
       .setOrigin(0.5)
       .setFontFamily('Arial')
-      .setFontSize(35)
+      .setFontSize(32)
+      .setColor('#FF4444')
+      .setFontStyle('bold')
+
+    const finalScoreText = this.add.text(0, 10, `Final Score: ${this.score}`)
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(24)
+      .setColor('#FFD700')
+      .setFontStyle('bold')
+
+    const restartHint = this.add.text(0, 60, 'Click "New Game" to restart')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(18)
       .setColor('white')
 
     this.gameOverScreen = this.add.container(0, 0)
       .add(gameOverBackground)
-      .add(gameOverText)
+      .add(gameOverTitle)
+      .add(finalScoreText)
+      .add(restartHint)
       .setDepth(1)
 
-    Phaser.Display.Align.In.Center(gameOverText, gameOverBackground)
-
-    // TODO: disable click & remove gameover screen on new game
+    Phaser.Display.Align.In.Center(gameOverTitle, gameOverBackground, 0, -50)
+    Phaser.Display.Align.In.Center(finalScoreText, gameOverBackground, 0, 10)
+    Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, 60)
   }
 
   computeScore (chains: Cell[][], cascades: number): number {
@@ -304,7 +352,7 @@ export default class GameScene extends Phaser.Scene {
       const expectedX = cell.column * CELL_SIZE + CELL_SIZE / 2
       const expectedY = cell.row * CELL_SIZE + CELL_SIZE / 2
       if (sprite.x !== expectedX || sprite.y !== expectedY) {
-        const animationPromise = new Promise(resolve => {
+        const animationPromise = new Promise<void>(resolve => {
           this.tweens.add({
             targets: sprite,
             x: expectedX,
@@ -368,12 +416,16 @@ export default class GameScene extends Phaser.Scene {
   }
 
   destroyCell (cell: Cell) {
-    return new Promise(resolve => {
+    return new Promise<void>(resolve => {
       cell.empty = true
+      // Create particle effect-like animation
       this.tweens.add({
         targets: cell.sprite,
         alpha: 0,
+        scale: 1.5,
+        angle: 360,
         duration: destroyDuration,
+        ease: 'Power2',
         onComplete: () => resolve()
       })
     })
@@ -385,11 +437,32 @@ export default class GameScene extends Phaser.Scene {
 
   selectCell (cell: Cell) {
     this.selectedCell = cell
-    this.selectedCell.sprite.setScale(1.2)
+    // Add glow effect and scale
+    this.tweens.add({
+      targets: this.selectedCell.sprite,
+      scale: 1.25,
+      duration: 150,
+      ease: 'Back.easeOut'
+    })
+    // Add a subtle pulse
+    this.tweens.add({
+      targets: this.selectedCell.sprite,
+      alpha: 0.7,
+      yoyo: true,
+      repeat: -1,
+      duration: 400
+    })
   }
 
   deselectCell () {
-    this.selectedCell.sprite.setScale(1)
+    this.tweens.killTweensOf(this.selectedCell.sprite)
+    this.tweens.add({
+      targets: this.selectedCell.sprite,
+      scale: 1,
+      alpha: 1,
+      duration: 150,
+      ease: 'Back.easeIn'
+    })
     this.selectedCell = null
   }
 

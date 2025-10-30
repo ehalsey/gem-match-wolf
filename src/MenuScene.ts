@@ -9,6 +9,8 @@ export default class MenuScene extends Phaser.Scene {
   zone: Phaser.GameObjects.Zone
   scoreLabel: Phaser.GameObjects.Text
   scoreValue: Phaser.GameObjects.Text
+  movesLabel: Phaser.GameObjects.Text
+  movesValue: Phaser.GameObjects.Text
   newGameButton: Phaser.GameObjects.Text
 
   constructor () {
@@ -21,17 +23,35 @@ export default class MenuScene extends Phaser.Scene {
   create () {
     this.cameras.main.setViewport(0, 0, MENU_WIDTH, MENU_HEIGHT)
 
+    // Score display
     this.scoreLabel = this.add.text(0, 0, 'Score')
       .setFontFamily('Arial')
-      .setFontSize(25)
-      .setColor('white')
+      .setFontSize(22)
+      .setColor('#FFD700')
       .setAlign('center')
+      .setFontStyle('bold')
 
     this.scoreValue = this.add.text(0, 35, '0')
       .setFontFamily('Arial')
-      .setFontSize(25)
+      .setFontSize(28)
       .setColor('white')
       .setAlign('center')
+      .setFontStyle('bold')
+
+    // Moves display
+    this.movesLabel = this.add.text(0, 0, 'Moves')
+      .setFontFamily('Arial')
+      .setFontSize(22)
+      .setColor('#FFD700')
+      .setAlign('center')
+      .setFontStyle('bold')
+
+    this.movesValue = this.add.text(0, 35, '30')
+      .setFontFamily('Arial')
+      .setFontSize(28)
+      .setColor('white')
+      .setAlign('center')
+      .setFontStyle('bold')
 
     this.newGameButton = new TextButton(this, 0, 150, 'New Game')
     this.newGameButton.on('pointerup', () => {
@@ -41,6 +61,8 @@ export default class MenuScene extends Phaser.Scene {
     this.zone = this.add.zone(0, 0, MENU_WIDTH, MENU_HEIGHT).setOrigin(0)
     Phaser.Display.Align.In.TopCenter(this.scoreLabel, this.zone, 0, -20)
     Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, -60)
+    Phaser.Display.Align.In.TopCenter(this.movesLabel, this.zone, 0, -120)
+    Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, -160)
     Phaser.Display.Align.In.TopCenter(this.newGameButton, this.zone, 0, -250)
 
     // TODO: hint button
@@ -54,6 +76,17 @@ export default class MenuScene extends Phaser.Scene {
     if (key === 'score') {
       this.scoreValue.setText(data)
       Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, -60)
+    } else if (key === 'moves') {
+      this.movesValue.setText(data)
+      // Change color based on moves remaining
+      if (data <= 5) {
+        this.movesValue.setColor('#FF4444')
+      } else if (data <= 10) {
+        this.movesValue.setColor('#FFA500')
+      } else {
+        this.movesValue.setColor('white')
+      }
+      Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, -160)
     }
   }
 }

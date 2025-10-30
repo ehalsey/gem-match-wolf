@@ -1,5 +1,7 @@
 * {
   margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 html {
@@ -8,26 +10,38 @@ html {
 
 body {
   height: 100%;
-  background-color: #e7e9eb;
-  font-family: Open Sans, Lato, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
 }
 
 .Header {
-  height: 50px;
+  height: 70px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #252e38;
-  box-shadow: 0 0 25px 0 #131c25;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .Header-title {
   color: white;
-  font-size: 25px;
+  font-size: 32px;
+  font-weight: bold;
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+  letter-spacing: 2px;
 }
 
 .CanvasContainer {
-  margin-top: 50px;
+  margin-top: 30px;
   display: flex;
   justify-content: center;
+  align-items: center;
+}
+
+.CanvasContainer canvas {
+  border-radius: 10px;
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
 }
