@@ -5,10 +5,13 @@ A modern match-3 puzzle game built with TypeScript, Phaser 3, and Webpack. Match
 ## Features
 
 - **Classic Match-3 Gameplay** - Swap adjacent gems to create matches of 3 or more
-- **Power-Up System** - Create special boosters by matching 4+ gems:
+- **Power-Up System** - Create special boosters with different match patterns:
   - **Horizontal Rocket** - Destroys entire row (match 4 horizontally)
   - **Vertical Rocket** - Destroys entire column (match 4 vertically)
-  - **Light Ball** - Destroys all gems of one color (match 5+ gems)
+  - **Light Ball (Color Bomb)** - Destroys all gems of one color across entire board (match 5+ gems)
+  - **TNT** - Explodes in a cross pattern, destroying 4 adjacent cells (match L-shape)
+  - **Fly-Away** - Flies to best target and explodes twice in cross patterns (match 2x2 square)
+- **Drag and Drop Support** - Click-and-drag gems to swap them
 - **Floating Score Feedback** - See points earned right where you made the match
 - **Move Counter** - Strategic gameplay with limited moves
 - **Cascade Scoring** - Chain reactions multiply your score
@@ -24,16 +27,36 @@ A modern match-3 puzzle game built with TypeScript, Phaser 3, and Webpack. Match
 4. **Plan ahead** - you have 30 moves to reach the highest score possible
 
 ### Power-Ups
-Power-ups are created automatically when you match 4 or more gems:
+Power-ups are created automatically when you match gems in special patterns:
 
-- **Match 4 horizontally** → Creates a Horizontal Rocket
-- **Match 4 vertically** → Creates a Vertical Rocket
-- **Match 5+ gems** → Creates a Light Ball (Color Bomb)
+#### Linear Matches
+- **Match 4 horizontally** → Creates a **Horizontal Rocket** 🚀
+  - Destroys the entire row when activated
+  - **Swap up/down** to move it to a different row before activating
+- **Match 4 vertically** → Creates a **Vertical Rocket** 🚀
+  - Destroys the entire column when activated
+  - **Swap left/right** to move it to a different column before activating
+- **Match 5+ gems** → Creates a **Light Ball** ⚪ (Color Bomb)
+  - Destroys ALL gems of one color across the entire board
+  - **Swap with a specific gem** to choose which color to destroy
+  - Or click directly to auto-pick an adjacent color
+
+#### Special Patterns
+- **Match L-shape** (5 gems in L formation) → Creates **TNT** 💣
+  - Explodes in a cross pattern (up, down, left, right)
+  - Destroys 4 adjacent cells plus the center
+- **Match 2x2 square** (4 gems in a square) → Creates **Fly-Away** 🚁
+  - Explodes at starting position in cross pattern
+  - Flies to the best strategic target on the board
+  - Explodes again at target in cross pattern
+  - Clears ~10 gems total
 
 **Activating Power-Ups:**
 - Click directly on a power-up to activate it immediately
 - Swap a power-up with an adjacent gem to activate it
-- Power-ups clear large sections of the board and can trigger massive cascades!
+- Drag and drop a power-up to swap and activate it
+- Power-ups can chain-activate other power-ups they hit!
+- Power-ups clear large sections of the board and trigger massive cascades!
 
 ## Tips & Hints to Win
 
@@ -44,24 +67,31 @@ Power-ups are created automatically when you match 4 or more gems:
 
 ### Power-Up Mastery
 4. **Save power-ups for combos** - Try to activate multiple power-ups at once for massive points
-5. **Light Ball + Rocket combo** - The most powerful combination in the game
-6. **Create power-ups in the center** - They're easier to activate when surrounded by gems
+5. **Light Ball is king** - Destroys all gems of one color; combo with rockets for insane clears
+6. **2x2 squares create Fly-Away** - Look for opportunities to drag gems to form 2x2 squares
+7. **L-shapes create TNT** - 5 gems in an L pattern make explosive TNT power-ups
+8. **Chain reactions** - Power-ups can trigger other power-ups, creating devastating combos
+9. **Position your rockets** - Swap rockets to different rows/columns before activating
+10. **Choose Light Ball targets** - Swap with specific gem colors to control what gets destroyed
+11. **Create power-ups in the center** - They're easier to activate when surrounded by gems
 
 ### Scoring Tips
-7. **Watch the floating scores** - Gold text appears showing exactly how many points each match earned
-8. **Cascades multiply your score** - Each cascade level increases your points exponentially
-9. **Longer chains = more points** - A 6-match is worth much more than two 3-matches
-10. **Power-up activations are huge** - They clear many gems and can trigger cascades
+12. **Watch the floating scores** - Gold text appears showing exactly how many points each match earned
+13. **Cascades multiply your score** - Each cascade level increases your points exponentially
+14. **Longer chains = more points** - A 6-match is worth much more than two 3-matches
+15. **Power-up activations are huge** - They clear many gems and can trigger cascades
 
 ### Move Management
-11. **Don't rush** - Think before each move; you only get 30 moves
-12. **Watch the move counter** - Changes color at 10 moves (orange) and 5 moves (red)
-13. **Forced moves** - If you see "No more moves!" you weren't looking carefully enough
+16. **Don't rush** - Think before each move; you only get 30 moves
+17. **Watch the move counter** - Changes color at 10 moves (orange) and 5 moves (red)
+18. **Forced moves** - If you see "No more moves!" you weren't looking carefully enough
 
 ### Advanced Tactics
-14. **Corner strategy** - Work from corners and edges to create cascades toward the center
-15. **T and L shapes** - These create power-ups at the intersection when they match
-16. **Setup moves** - Sometimes make a "bad" move to set up a better one next turn
+19. **Corner strategy** - Work from corners and edges to create cascades toward the center
+20. **L-shapes and 2x2 squares** - Special patterns create the most powerful boosters (TNT, Fly-Away)
+21. **Setup moves** - Sometimes make a "bad" move to set up a better one next turn
+22. **Fly-Away targets** - The Fly-Away automatically finds the best strategic target with most matching neighbors
+23. **Rocket positioning** - Move rockets to crowded rows/columns for maximum destruction
 
 ## Scoring System
 
