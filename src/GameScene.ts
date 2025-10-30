@@ -833,10 +833,10 @@ export default class GameScene extends Phaser.Scene {
             }
           }
 
-          // Animate fly-away sprite to target (will implement animation separately)
-          console.log(`Fly-away from [${cell.row}, ${cell.column}] to [${bestTarget.row}, ${bestTarget.column}]`)
+          // Animate fly-away sprite flying to target
+          this.animateFlyAway(cell, bestTarget)
 
-          // Second explosion at target position (cross pattern)
+          // Second explosion at target position (cross pattern) - will happen after animation
           for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
             const targetRow = bestTarget.row + dir.dr
             const targetCol = bestTarget.column + dir.dc
@@ -879,6 +879,55 @@ export default class GameScene extends Phaser.Scene {
     }
 
     return bestCell
+  }
+
+  animateFlyAway (fromCell: Cell, toCell: Cell) {
+    const startX = fromCell.column * CELL_SIZE + CELL_SIZE / 2
+    const startY = fromCell.row * CELL_SIZE + CELL_SIZE / 2
+    const endX = toCell.column * CELL_SIZE + CELL_SIZE / 2
+    const endY = toCell.row * CELL_SIZE + CELL_SIZE / 2
+
+    // Create a temporary sprite for the flying animation
+    const flyingSprite = this.add.sprite(startX, startY, 'fly-away')
+      .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+      .setDepth(2000)
+
+    // Calculate orbit radius for spinning around target
+    const orbitRadius = CELL_SIZE * 0.7
+
+    // Step 1: Fly to target while spinning
+    this.tweens.add({
+      targets: flyingSprite,
+      x: endX,
+      y: endY,
+      angle: 360,
+      duration: 600,
+      ease: 'Cubic.easeInOut',
+      onComplete: () => {
+        // Step 2: Orbit around target once
+        let orbitAngle = 0
+        this.tweens.add({
+          targets: { progress: 0 },
+          progress: 1,
+          duration: 400,
+          ease: 'Linear',
+          onUpdate: (tween) => {
+            const progress = tween.progress
+            orbitAngle = progress * Math.PI * 2
+            flyingSprite.x = endX + Math.cos(orbitAngle) * orbitRadius
+            flyingSprite.y = endY + Math.sin(orbitAngle) * orbitRadius
+            flyingSprite.angle = 360 + (progress * 360)
+          },
+          onComplete: () => {
+            // Create explosion effect at target
+            this.createPowerUpEffect(endX, endY, 'fly-away', toCell)
+
+            // Destroy the flying sprite
+            flyingSprite.destroy()
+          }
+        })
+      }
+    })
   }
 
   createPowerUpEffect (x: number, y: number, powerUpType: PowerUpType, cell: Cell) {
