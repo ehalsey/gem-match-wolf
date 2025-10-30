@@ -38,12 +38,16 @@ type Cell = {
 export default class GameScene extends Phaser.Scene {
   board: Cell[][]
   selectedCell: Cell
+  draggedCell: Cell | null
+  dragStartX: number
+  dragStartY: number
   moveInProgress: boolean
   score: number
   moves: number
   zone: Phaser.GameObjects.Zone
   isGameOver: boolean
   gameOverScreen: Phaser.GameObjects.Container
+  debugGraphics: Phaser.GameObjects.Graphics
 
   constructor () {
     super({
@@ -81,6 +85,10 @@ export default class GameScene extends Phaser.Scene {
     // Create particle texture
     this.createParticleTexture()
 
+    // Create debug graphics layer
+    this.debugGraphics = this.add.graphics()
+    this.debugGraphics.setDepth(10000)
+
     this.initBoard()
 
     this.setScore(0)
@@ -88,6 +96,11 @@ export default class GameScene extends Phaser.Scene {
 
     // TODO: clicking on "new game" triggers this...
     this.input.on('pointerdown', this.onPointerDown, this)
+
+    // Set up drag and drop handlers
+    this.input.on('dragstart', this.onDragStart, this)
+    this.input.on('drag', this.onDrag, this)
+    this.input.on('dragend', this.onDragEnd, this)
 
     this.registry.events.on('NEW_GAME', () => {
       this.handleStartNewGame()
@@ -177,7 +190,7 @@ export default class GameScene extends Phaser.Scene {
         const y = row * CELL_SIZE + CELL_SIZE / 2
         cell.sprite = this.add.sprite(x, y, cell.color)
           .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
-          .setInteractive()
+          .setInteractive({ draggable: true })
       }
     }
   }
@@ -643,7 +656,7 @@ export default class GameScene extends Phaser.Scene {
     // Create new power-up sprite
     powerUpCell.sprite = this.add.sprite(x, y, powerUpType)
       .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
-      .setInteractive()
+      .setInteractive({ draggable: true })
 
     // Create power-up creation burst effect
     this.createPowerUpBurst(x, y, powerUpType)
@@ -1010,7 +1023,7 @@ export default class GameScene extends Phaser.Scene {
         const y = (row - numberOfEmptyCells) * CELL_SIZE + CELL_SIZE / 2
         cell.sprite = this.add.sprite(x, y, cell.color)
           .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
-          .setInteractive()
+          .setInteractive({ draggable: true })
       }
     }
     await this.moveSpritesWhereTheyBelong()
@@ -1039,6 +1052,14 @@ export default class GameScene extends Phaser.Scene {
     }
 
     await Promise.all(animationsPromises)
+
+    // Update debug display after animations
+    this.updateDebugDisplay()
+  }
+
+  updateDebugDisplay () {
+    // Debug borders disabled
+    this.debugGraphics.clear()
   }
 
   getLowestEmptyCellBelow (cell: Cell): Cell {
@@ -1255,6 +1276,171 @@ export default class GameScene extends Phaser.Scene {
   cellsAreNeighbours (cell1: Cell, cell2: Cell): boolean {
     return (cell1.row === cell2.row && (cell1.column === cell2.column + 1 || cell1.column === cell2.column - 1)) ||
       (cell1.column === cell2.column && (cell1.row === cell2.row + 1 || cell1.row === cell2.row - 1))
+  }
+
+  onDragStart (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Sprite) {
+    if (this.moveInProgress) {
+      return
+    }
+
+    // Find the cell for this sprite
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (cell.sprite === gameObject) {
+          this.draggedCell = cell
+          this.dragStartX = gameObject.x
+          this.dragStartY = gameObject.y
+
+          // Bring sprite to top and make it slightly larger (1.17x = 0.9 * 1.3)
+          gameObject.setDepth(1000)
+          gameObject.setDisplaySize(CELL_SIZE * 1.17, CELL_SIZE * 1.17)
+
+          // Clear any selection
+          if (this.selectedCell) {
+            this.deselectCell()
+          }
+
+          this.updateDebugDisplay()
+          return
+        }
+      }
+    }
+  }
+
+  onDrag (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Sprite, dragX: number, dragY: number) {
+    if (!this.draggedCell || this.moveInProgress) {
+      return
+    }
+
+    // Make sprite follow pointer
+    gameObject.x = dragX
+    gameObject.y = dragY
+  }
+
+  async onDragEnd (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Sprite) {
+    if (!this.draggedCell || this.moveInProgress) {
+      return
+    }
+
+    const draggedCell = this.draggedCell
+
+    // ALWAYS reset sprite appearance immediately, no matter what
+    gameObject.setDepth(0)
+    gameObject.setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+    gameObject.setAlpha(1)
+
+    // Stop any running tweens on this sprite
+    this.tweens.killTweensOf(gameObject)
+
+    // Determine which cell we're over
+    const targetRow = Math.floor(pointer.worldY / CELL_SIZE)
+    const targetCol = Math.floor(pointer.worldX / CELL_SIZE)
+
+    // Check if target is valid and is a neighbor
+    if (
+      targetRow >= 0 && targetRow < size &&
+      targetCol >= 0 && targetCol < size
+    ) {
+      const targetCell = this.board[targetRow][targetCol]
+
+      // If it's the same cell, just snap back
+      if (targetCell === draggedCell) {
+        gameObject.x = this.dragStartX
+        gameObject.y = this.dragStartY
+        this.draggedCell = null
+        this.updateDebugDisplay()
+        return
+      }
+
+      // If it's a neighbor, perform the swap
+      if (this.cellsAreNeighbours(draggedCell, targetCell)) {
+        const firstCell = draggedCell
+        const secondCell = targetCell
+
+        this.moveInProgress = true
+        this.draggedCell = null
+
+        this.swapCells(firstCell, secondCell)
+        this.sound.play('swap', { volume: 0.3 })
+
+        await this.moveSpritesWhereTheyBelong()
+
+        // Check if either swapped cell is a power-up and activate it
+        const hasPowerUp = firstCell.powerup || secondCell.powerup
+        if (hasPowerUp) {
+          console.log('=== POWER-UP SWAPPED (via drag)! ===')
+          if (firstCell.powerup) {
+            console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
+            this.triggerPowerUp(firstCell)
+          }
+          if (secondCell.powerup) {
+            console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
+            this.triggerPowerUp(secondCell)
+          }
+          await this.destroyCells()
+          await this.makeCellsFall()
+          await this.refillBoard()
+        }
+
+        if (this.boardShouldExplode() || hasPowerUp) {
+          // Valid move - decrement moves counter
+          this.decrementMoves()
+
+          let cascades = 0
+          while (this.boardShouldExplode()) {
+            const chains = this.getExplodingChains()
+
+            console.log('=== BEFORE POWER-UP CREATION (drag) ===')
+            this.logBoardState()
+
+            // Create power-ups from chains of 4+ gems
+            this.createPowerUpsFromChains(chains)
+
+            console.log('=== AFTER POWER-UP CREATION (drag) ===')
+            this.logBoardState()
+
+            console.log('=== BEFORE DESTROY (drag) ===')
+            this.logBoardState()
+
+            // Show floating score text for each chain
+            this.showFloatingScores(chains, cascades)
+
+            await this.destroyCells()
+
+            console.log('=== AFTER DESTROY (drag) ===')
+            this.logBoardState()
+
+            this.setScore(this.score + this.computeScore(chains, cascades))
+
+            await this.makeCellsFall()
+
+            await this.refillBoard()
+
+            cascades++
+          }
+          const winningMoves = this.getWinningMoves()
+          console.log(`${winningMoves.length} winning moves`)
+          if (winningMoves.length === 0) {
+            this.gameOver('No more moves!')
+          }
+        } else {
+          // Invalid move - swap back and play error sound
+          this.sound.play('swap-back', { volume: 0.3 })
+          this.swapCells(firstCell, secondCell)
+          await this.moveSpritesWhereTheyBelong()
+        }
+
+        this.moveInProgress = false
+        return
+      }
+    }
+
+    // Not a valid neighbor or out of bounds - snap back to original position
+    gameObject.x = this.dragStartX
+    gameObject.y = this.dragStartY
+    this.draggedCell = null
+    this.updateDebugDisplay()
   }
 }
 
