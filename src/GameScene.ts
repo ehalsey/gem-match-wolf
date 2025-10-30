@@ -284,6 +284,9 @@ export default class GameScene extends Phaser.Scene {
         console.log('=== BEFORE DESTROY ===')
         this.logBoardState()
 
+        // Show floating score text for each chain
+        this.showFloatingScores(chains, cascades)
+
         await this.destroyCells()
 
         console.log('=== AFTER DESTROY ===')
@@ -383,6 +386,43 @@ export default class GameScene extends Phaser.Scene {
     return chains
       .map(chain => 50 * (chain.length + 1 - explosionThreshold))
       .reduce((score, chainScore) => score + chainScore, 0) * (cascades + 1)
+  }
+
+  showFloatingScores (chains: Cell[][], cascades: number) {
+    for (const chain of chains) {
+      // Calculate score for this specific chain
+      const chainScore = 50 * (chain.length + 1 - explosionThreshold) * (cascades + 1)
+
+      // Find the center of the chain
+      const middleIndex = Math.floor(chain.length / 2)
+      const centerCell = chain[middleIndex]
+
+      // Calculate world position
+      const x = centerCell.column * CELL_SIZE + CELL_SIZE / 2
+      const y = centerCell.row * CELL_SIZE + CELL_SIZE / 2
+
+      // Create floating text
+      const scoreText = this.add.text(x, y, `+${chainScore}`, {
+        fontSize: '32px',
+        fontFamily: 'Arial',
+        color: '#FFD700',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 4
+      })
+        .setOrigin(0.5)
+        .setDepth(100)
+
+      // Animate: float up and fade out
+      this.tweens.add({
+        targets: scoreText,
+        y: y - 80,
+        alpha: 0,
+        duration: 1000,
+        ease: 'Cubic.easeOut',
+        onComplete: () => scoreText.destroy()
+      })
+    }
   }
 
   createPowerUpsFromChains (chains: Cell[][]) {
