@@ -901,7 +901,7 @@ export default class GameScene extends Phaser.Scene {
       x: endX,
       y: endY,
       angle: 360,
-      duration: 600,
+      duration: 1200,
       ease: 'Cubic.easeInOut',
       onComplete: () => {
         // Step 2: Orbit around target once
@@ -909,7 +909,7 @@ export default class GameScene extends Phaser.Scene {
         this.tweens.add({
           targets: { progress: 0 },
           progress: 1,
-          duration: 400,
+          duration: 800,
           ease: 'Linear',
           onUpdate: (tween) => {
             const progress = tween.progress
@@ -1265,7 +1265,13 @@ export default class GameScene extends Phaser.Scene {
   }
 
   boardShouldExplode (): boolean {
-    return this.board.some(row => row.some(cell => this.shouldExplode(cell)))
+    // Check for regular 3+ matches
+    const hasRegularMatches = this.board.some(row => row.some(cell => this.shouldExplode(cell)))
+
+    // Also check for special patterns (2x2 squares, L-shapes)
+    const hasSpecialPatterns = this.detectSpecialPatterns().length > 0
+
+    return hasRegularMatches || hasSpecialPatterns
   }
 
   shouldExplode (cell: Cell): boolean {
@@ -1329,6 +1335,7 @@ export default class GameScene extends Phaser.Scene {
 
   onDragStart (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Sprite) {
     if (this.moveInProgress) {
+      console.log('Drag blocked: move in progress')
       return
     }
 
@@ -1340,6 +1347,8 @@ export default class GameScene extends Phaser.Scene {
           this.draggedCell = cell
           this.dragStartX = gameObject.x
           this.dragStartY = gameObject.y
+
+          console.log(`Drag started on ${cell.color} at [${cell.row}, ${cell.column}]`)
 
           // Bring sprite to top and make it slightly larger (1.17x = 0.9 * 1.3)
           gameObject.setDepth(1000)
@@ -1369,6 +1378,7 @@ export default class GameScene extends Phaser.Scene {
 
   async onDragEnd (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Sprite) {
     if (!this.draggedCell || this.moveInProgress) {
+      console.log('Drag end blocked:', !this.draggedCell ? 'no dragged cell' : 'move in progress')
       return
     }
 
@@ -1386,15 +1396,19 @@ export default class GameScene extends Phaser.Scene {
     const targetRow = Math.floor(pointer.worldY / CELL_SIZE)
     const targetCol = Math.floor(pointer.worldX / CELL_SIZE)
 
+    console.log(`Drag ended at [${targetRow}, ${targetCol}], dragged from [${draggedCell.row}, ${draggedCell.column}]`)
+
     // Check if target is valid and is a neighbor
     if (
       targetRow >= 0 && targetRow < size &&
       targetCol >= 0 && targetCol < size
     ) {
       const targetCell = this.board[targetRow][targetCol]
+      console.log(`Target cell: ${targetCell.color} at [${targetCell.row}, ${targetCell.column}]`)
 
       // If it's the same cell, just snap back
       if (targetCell === draggedCell) {
+        console.log('Same cell - snapping back')
         gameObject.x = this.dragStartX
         gameObject.y = this.dragStartY
         this.draggedCell = null
@@ -1403,17 +1417,22 @@ export default class GameScene extends Phaser.Scene {
       }
 
       // If it's a neighbor, perform the swap
-      if (this.cellsAreNeighbours(draggedCell, targetCell)) {
+      const areNeighbors = this.cellsAreNeighbours(draggedCell, targetCell)
+      console.log(`Are neighbors: ${areNeighbors}`)
+      if (areNeighbors) {
         const firstCell = draggedCell
         const secondCell = targetCell
 
+        console.log('Performing swap...')
         this.moveInProgress = true
         this.draggedCell = null
 
         this.swapCells(firstCell, secondCell)
         this.sound.play('swap', { volume: 0.3 })
 
+        console.log('Moving sprites...')
         await this.moveSpritesWhereTheyBelong()
+        console.log('Sprites moved')
 
         // Check if either swapped cell is a power-up and activate it
         const hasPowerUp = firstCell.powerup || secondCell.powerup
@@ -1432,8 +1451,12 @@ export default class GameScene extends Phaser.Scene {
           await this.refillBoard()
         }
 
-        if (this.boardShouldExplode() || hasPowerUp) {
+        const shouldExplode = this.boardShouldExplode()
+        console.log(`Board should explode: ${shouldExplode}, has power-up: ${hasPowerUp}`)
+
+        if (shouldExplode || hasPowerUp) {
           // Valid move - decrement moves counter
+          console.log('Valid move! Processing...')
           this.decrementMoves()
 
           let cascades = 0
@@ -1475,17 +1498,21 @@ export default class GameScene extends Phaser.Scene {
           }
         } else {
           // Invalid move - swap back and play error sound
+          console.log('Invalid move! Swapping back...')
           this.sound.play('swap-back', { volume: 0.3 })
           this.swapCells(firstCell, secondCell)
           await this.moveSpritesWhereTheyBelong()
+          console.log('Swapped back to original positions')
         }
 
+        console.log('Move complete, setting moveInProgress to false')
         this.moveInProgress = false
         return
       }
     }
 
     // Not a valid neighbor or out of bounds - snap back to original position
+    console.log('Not a valid neighbor or out of bounds - snapping back')
     gameObject.x = this.dragStartX
     gameObject.y = this.dragStartY
     this.draggedCell = null
