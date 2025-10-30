@@ -930,6 +930,23 @@ export default class GameScene extends Phaser.Scene {
 
             // Destroy the flying sprite
             flyingSprite.destroy()
+
+            // Wait for destruction animations to complete, then trigger cascade
+            this.time.delayedCall(destroyDuration, async () => {
+              // Now trigger the fall/refill/cascade logic
+              await this.makeCellsFall()
+              await this.refillBoard()
+
+              // Continue with cascades if there are more matches
+              while (this.boardShouldExplode()) {
+                const chains = this.getExplodingChains()
+                this.createPowerUpsFromChains(chains)
+                await this.destroyCells()
+                this.setScore(this.score + this.computeScore(chains, 0))
+                await this.makeCellsFall()
+                await this.refillBoard()
+              }
+            })
           }
         })
       }
