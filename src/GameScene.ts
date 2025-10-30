@@ -834,24 +834,8 @@ export default class GameScene extends Phaser.Scene {
           }
 
           // Animate fly-away sprite flying to target
+          // The target explosion will happen inside the animation's onComplete callback
           this.animateFlyAway(cell, bestTarget)
-
-          // Second explosion at target position (cross pattern) - will happen after animation
-          for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
-            const targetRow = bestTarget.row + dir.dr
-            const targetCol = bestTarget.column + dir.dc
-            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
-              const targetCell = this.board[targetRow][targetCol]
-              if (targetCell.powerup) {
-                console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-                this.triggerPowerUp(targetCell)
-              } else {
-                targetCell.empty = true
-              }
-            }
-          }
-          // Mark best target itself for destruction
-          bestTarget.empty = true
         }
         break
     }
@@ -921,6 +905,28 @@ export default class GameScene extends Phaser.Scene {
           onComplete: () => {
             // Create explosion effect at target
             this.createPowerUpEffect(endX, endY, 'fly-away', toCell)
+
+            // NOW destroy the target and surrounding cells (cross pattern)
+            for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
+              const targetRow = toCell.row + dir.dr
+              const targetCol = toCell.column + dir.dc
+              if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+                const targetCell = this.board[targetRow][targetCol]
+                if (targetCell.powerup) {
+                  console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+                  this.triggerPowerUp(targetCell)
+                } else if (!targetCell.empty) {
+                  // Mark empty and visually destroy the cell
+                  targetCell.empty = true
+                  this.destroyCell(targetCell)
+                }
+              }
+            }
+            // Mark target itself for destruction and visually destroy it
+            if (!toCell.empty) {
+              toCell.empty = true
+              this.destroyCell(toCell)
+            }
 
             // Destroy the flying sprite
             flyingSprite.destroy()
