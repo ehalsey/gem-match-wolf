@@ -17,6 +17,8 @@ const gems = [
   'yellow'
 ]
 
+type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'light-ball' | null
+
 /**
  * Number of cells required to trigger an explosion
  */
@@ -30,6 +32,7 @@ type Cell = {
   color: string
   sprite: Phaser.GameObjects.Sprite
   empty: boolean
+  powerup: PowerUpType
 }
 
 export default class GameScene extends Phaser.Scene {
@@ -51,6 +54,12 @@ export default class GameScene extends Phaser.Scene {
 
   preload () {
     gems.forEach(gem => this.load.image(gem, `assets/${gem}.png`))
+
+    // Load power-up sprites
+    this.load.image('horizontal-rocket', 'assets/horizontal-rocket.png')
+    this.load.image('vertical-rocket', 'assets/vertical-rocket.png')
+    this.load.image('tnt', 'assets/tnt.png')
+    this.load.image('light-ball', 'assets/light-ball.png')
   }
 
   create () {
@@ -181,6 +190,36 @@ export default class GameScene extends Phaser.Scene {
 
     const pointedCell = this.getCellAt(pointer)
 
+    // If clicking a power-up directly, activate it immediately
+    if (pointedCell.powerup && this.selectedCell == null) {
+      console.log('=== POWER-UP CLICKED DIRECTLY! ===')
+      console.log(`Activating ${pointedCell.powerup} at [${pointedCell.row}, ${pointedCell.column}]`)
+      this.moveInProgress = true
+      this.triggerPowerUp(pointedCell)
+      await this.destroyCells()
+      this.decrementMoves()
+      await this.makeCellsFall()
+      await this.refillBoard()
+
+      // Continue with cascade logic
+      while (this.boardShouldExplode()) {
+        const chains = this.getExplodingChains()
+        this.createPowerUpsFromChains(chains)
+        await this.destroyCells()
+        this.setScore(this.score + this.computeScore(chains, 0))
+        await this.makeCellsFall()
+        await this.refillBoard()
+      }
+
+      const winningMoves = this.getWinningMoves()
+      if (winningMoves.length === 0) {
+        this.gameOver('No more moves!')
+      }
+
+      this.moveInProgress = false
+      return
+    }
+
     if (this.selectedCell == null) {
       this.selectCell(pointedCell)
       return
@@ -205,7 +244,24 @@ export default class GameScene extends Phaser.Scene {
 
     await this.moveSpritesWhereTheyBelong()
 
-    if (this.boardShouldExplode()) {
+    // Check if either swapped cell is a power-up and activate it
+    const hasPowerUp = firstCell.powerup || secondCell.powerup
+    if (hasPowerUp) {
+      console.log('=== POWER-UP SWAPPED! ===')
+      if (firstCell.powerup) {
+        console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
+        this.triggerPowerUp(firstCell)
+      }
+      if (secondCell.powerup) {
+        console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
+        this.triggerPowerUp(secondCell)
+      }
+      await this.destroyCells()
+      await this.makeCellsFall()
+      await this.refillBoard()
+    }
+
+    if (this.boardShouldExplode() || hasPowerUp) {
       // Valid move - decrement moves counter
       this.decrementMoves()
 
@@ -213,7 +269,25 @@ export default class GameScene extends Phaser.Scene {
       while (this.boardShouldExplode()) {
         const chains = this.getExplodingChains()
 
+        console.log('=== BEFORE POWER-UP CREATION ===')
+        this.logBoardState()
+
+        // Create power-ups from chains of 4+ gems
+        this.createPowerUpsFromChains(chains)
+
+        console.log('=== AFTER POWER-UP CREATION ===')
+        this.logBoardState()
+
+        // Note: Power-ups are NOT activated on creation - they stay on board
+        // They only activate when involved in a future match or swap
+
+        console.log('=== BEFORE DESTROY ===')
+        this.logBoardState()
+
         await this.destroyCells()
+
+        console.log('=== AFTER DESTROY ===')
+        this.logBoardState()
 
         this.setScore(this.score + this.computeScore(chains, cascades))
 
@@ -311,6 +385,149 @@ export default class GameScene extends Phaser.Scene {
       .reduce((score, chainScore) => score + chainScore, 0) * (cascades + 1)
   }
 
+  createPowerUpsFromChains (chains: Cell[][]) {
+    for (const chain of chains) {
+      if (chain.length >= 4) {
+        // Determine if chain is horizontal or vertical
+        const isHorizontal = chain[0].row === chain[1].row
+
+        // Choose the middle cell for the power-up
+        const middleIndex = Math.floor(chain.length / 2)
+        const powerUpCell = chain[middleIndex]
+
+        // Determine power-up type based on chain length and orientation
+        let powerUpType: PowerUpType
+        if (chain.length >= 5) {
+          powerUpType = 'light-ball'  // 5+ match → color bomb
+        } else if (isHorizontal) {
+          powerUpType = 'horizontal-rocket'  // 4 horizontal → horizontal rocket
+        } else {
+          powerUpType = 'vertical-rocket'  // 4 vertical → vertical rocket
+        }
+
+        // Mark the power-up cell - this prevents it from being destroyed
+        powerUpCell.powerup = powerUpType
+
+        // Change color to prevent matching with regular gems
+        powerUpCell.color = powerUpType
+
+        // Replace the sprite with the power-up sprite
+        const x = powerUpCell.column * CELL_SIZE + CELL_SIZE / 2
+        const y = powerUpCell.row * CELL_SIZE + CELL_SIZE / 2
+
+        // Destroy the old sprite
+        powerUpCell.sprite.destroy()
+
+        // Create new power-up sprite
+        powerUpCell.sprite = this.add.sprite(x, y, powerUpType)
+          .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+          .setInteractive()
+      }
+    }
+  }
+
+  activatePowerUps (chains: Cell[][]) {
+    // Find all power-ups that are adjacent to matching chains and activate them
+    const allChainCells = new Set(chains.flat())
+
+    for (const chain of chains) {
+      for (const cell of chain) {
+        // Check if this cell or its neighbors have power-ups
+        const neighbors = this.getNeighbors(cell)
+        for (const neighbor of neighbors) {
+          if (neighbor.powerup && !neighbor.empty) {
+            this.triggerPowerUp(neighbor)
+          }
+        }
+      }
+    }
+  }
+
+  getNeighbors (cell: Cell): Cell[] {
+    const neighbors: Cell[] = []
+    const { row, column } = cell
+
+    // Up
+    if (row > 0) neighbors.push(this.board[row - 1][column])
+    // Down
+    if (row < size - 1) neighbors.push(this.board[row + 1][column])
+    // Left
+    if (column > 0) neighbors.push(this.board[row][column - 1])
+    // Right
+    if (column < size - 1) neighbors.push(this.board[row][column + 1])
+
+    return neighbors
+  }
+
+  triggerPowerUp (cell: Cell) {
+    if (!cell.powerup) return
+
+    const powerUpType = cell.powerup
+
+    // Clear the power-up property and mark for destruction
+    cell.powerup = null
+    cell.empty = true
+
+    // Mark additional cells based on power-up type
+    switch (powerUpType) {
+      case 'horizontal-rocket':
+        // Destroy entire row
+        for (let col = 0; col < size; col++) {
+          this.board[cell.row][col].empty = true
+        }
+        break
+
+      case 'vertical-rocket':
+        // Destroy entire column
+        for (let row = 0; row < size; row++) {
+          this.board[row][cell.column].empty = true
+        }
+        break
+
+      case 'light-ball':
+        // Destroy all gems of the same color as adjacent gems
+        const targetColor = this.getAdjacentGemColor(cell)
+        if (targetColor) {
+          for (let row = 0; row < size; row++) {
+            for (let col = 0; col < size; col++) {
+              if (this.board[row][col].color === targetColor) {
+                this.board[row][col].empty = true
+              }
+            }
+          }
+        }
+        break
+    }
+  }
+
+  getAdjacentGemColor (cell: Cell): string | null {
+    const neighbors = this.getNeighbors(cell)
+    for (const neighbor of neighbors) {
+      if (!neighbor.empty && !neighbor.powerup && neighbor.color) {
+        return neighbor.color
+      }
+    }
+    return null
+  }
+
+  logBoardState () {
+    console.log('Board State:')
+    for (let row = 0; row < size; row++) {
+      const rowData = []
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        const spriteExists = cell.sprite && !cell.sprite.scene ? 'DESTROYED_SPRITE' : 'OK'
+        const display = cell.empty
+          ? '____'
+          : cell.powerup
+            ? `[${cell.powerup.substring(0, 4).toUpperCase()}]`
+            : cell.color.substring(0, 4).toUpperCase()
+        rowData.push(`${display}(${spriteExists})`)
+      }
+      console.log(`Row ${row}: ${rowData.join(' | ')}`)
+    }
+  }
+
   async makeCellsFall () {
     for (let column = 0; column < size; column++) {
       for (let row = size - 1; row >= 0; row--) {
@@ -336,6 +553,7 @@ export default class GameScene extends Phaser.Scene {
         const cell = this.board[row][column]
         cell.color = Phaser.Math.RND.pick(gems)
         cell.empty = false
+        cell.powerup = null
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = (row - numberOfEmptyCells) * CELL_SIZE + CELL_SIZE / 2
@@ -422,36 +640,45 @@ export default class GameScene extends Phaser.Scene {
   destroyCell (cell: Cell) {
     return new Promise<void>(resolve => {
       cell.empty = true
-      // Create particle effect-like animation
+
+      // Simple pop: scale up slightly and fade out quickly
       this.tweens.add({
         targets: cell.sprite,
+        scale: 1.3,
         alpha: 0,
-        scale: 1.5,
-        angle: 360,
         duration: destroyDuration,
-        ease: 'Power2',
+        ease: 'Cubic.easeOut',
         onComplete: () => resolve()
       })
     })
   }
 
   getCellsToDestroy (): Cell[] {
-    return this.board.flat().filter(cell => this.shouldExplode(cell))
+    return this.board.flat().filter(cell =>
+      // Destroy cells that should explode (matching 3+) or are marked as empty
+      (this.shouldExplode(cell) || cell.empty) && !cell.powerup
+    )
   }
 
   selectCell (cell: Cell) {
     this.selectedCell = cell
-    // Add glow effect and scale
+
+    // Quick spin animation on click
     this.tweens.add({
       targets: this.selectedCell.sprite,
-      scale: 1.25,
-      duration: 150,
-      ease: 'Back.easeOut'
+      angle: 15,
+      duration: 100,
+      yoyo: true,
+      ease: 'Sine.easeInOut'
     })
+
+    // Add a gentle glow effect by brightening the sprite
+    this.selectedCell.sprite.setTint(0xffeeaa)
+
     // Add a subtle pulse
     this.tweens.add({
       targets: this.selectedCell.sprite,
-      alpha: 0.7,
+      alpha: 0.85,
       yoyo: true,
       repeat: -1,
       duration: 400
@@ -460,13 +687,9 @@ export default class GameScene extends Phaser.Scene {
 
   deselectCell () {
     this.tweens.killTweensOf(this.selectedCell.sprite)
-    this.tweens.add({
-      targets: this.selectedCell.sprite,
-      scale: 1,
-      alpha: 1,
-      duration: 150,
-      ease: 'Back.easeIn'
-    })
+    this.selectedCell.sprite.clearTint()
+    this.selectedCell.sprite.alpha = 1
+    this.selectedCell.sprite.angle = 0
     this.selectedCell = null
   }
 
@@ -486,6 +709,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   shouldExplode (cell: Cell): boolean {
+    // Power-ups don't explode as part of normal matches - they must be activated
+    if (cell.powerup) {
+      return false
+    }
     return this.shouldExplodeHorizontally(cell) || this.shouldExplodeVertically(cell)
   }
 
@@ -546,7 +773,7 @@ function createEmptyBoard (size: number): Cell[][] {
   for (let row = 0; row < size; row++) {
     board[row] = new Array(size)
     for (let column = 0; column < size; column++) {
-      board[row][column] = { row, column, color: null, sprite: null, empty: true }
+      board[row][column] = { row, column, color: null, sprite: null, empty: true, powerup: null }
     }
   }
   return board
