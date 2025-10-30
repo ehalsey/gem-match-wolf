@@ -226,35 +226,9 @@ export default class GameScene extends Phaser.Scene {
 
     const pointedCell = this.getCellAt(pointer)
 
-    // If clicking a power-up directly, activate it immediately
-    if (pointedCell.powerup && this.selectedCell == null) {
-      console.log('=== POWER-UP CLICKED DIRECTLY! ===')
-      console.log(`Activating ${pointedCell.powerup} at [${pointedCell.row}, ${pointedCell.column}]`)
-      this.moveInProgress = true
-      this.triggerPowerUp(pointedCell)
-      await this.destroyCells()
-      this.decrementMoves()
-      await this.makeCellsFall()
-      await this.refillBoard()
-
-      // Continue with cascade logic
-      while (this.boardShouldExplode()) {
-        const chains = this.getExplodingChains()
-        this.createPowerUpsFromChains(chains)
-        await this.destroyCells()
-        this.setScore(this.score + this.computeScore(chains, 0))
-        await this.makeCellsFall()
-        await this.refillBoard()
-      }
-
-      const winningMoves = this.getWinningMoves()
-      if (winningMoves.length === 0) {
-        this.gameOver('No more moves!')
-      }
-
-      this.moveInProgress = false
-      return
-    }
+    // Note: Power-ups can no longer be activated by direct click
+    // They MUST be swapped/dragged to activate, giving players strategic control
+    // to position rockets or choose Light Ball target colors
 
     if (this.selectedCell == null) {
       this.selectCell(pointedCell)

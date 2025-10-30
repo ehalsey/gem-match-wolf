@@ -38,8 +38,7 @@ Power-ups are created automatically when you match gems in special patterns:
   - **Swap left/right** to move it to a different column before activating
 - **Match 5+ gems** → Creates a **Light Ball** ⚪ (Color Bomb)
   - Destroys ALL gems of one color across the entire board
-  - **Swap with a specific gem** to choose which color to destroy
-  - Or click directly to auto-pick an adjacent color
+  - **Swap with a specific gem color** to destroy all of that color
 
 #### Special Patterns
 - **Match L-shape** (5 gems in L formation) → Creates **TNT** 💣
@@ -52,9 +51,8 @@ Power-ups are created automatically when you match gems in special patterns:
   - Clears ~10 gems total
 
 **Activating Power-Ups:**
-- Click directly on a power-up to activate it immediately
-- Swap a power-up with an adjacent gem to activate it
-- Drag and drop a power-up to swap and activate it
+- **Swap/drag a power-up** with an adjacent gem to activate it
+- Gives you strategic control to position rockets or choose Light Ball colors
 - Power-ups can chain-activate other power-ups they hit!
 - Power-ups clear large sections of the board and trigger massive cascades!
 
