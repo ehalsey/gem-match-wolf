@@ -286,11 +286,11 @@ export default class GameScene extends Phaser.Scene {
       console.log('=== POWER-UP SWAPPED! ===')
       if (firstCell.powerup) {
         console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
-        this.triggerPowerUp(firstCell)
+        this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
       }
       if (secondCell.powerup) {
         console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
-        this.triggerPowerUp(secondCell)
+        this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
       }
       await this.destroyCells()
       await this.makeCellsFall()
@@ -720,7 +720,7 @@ export default class GameScene extends Phaser.Scene {
     return neighbors
   }
 
-  triggerPowerUp (cell: Cell) {
+  triggerPowerUp (cell: Cell, swappedWith?: Cell) {
     if (!cell.powerup) return
 
     const powerUpType = cell.powerup
@@ -777,8 +777,17 @@ export default class GameScene extends Phaser.Scene {
         break
 
       case 'light-ball':
-        // Destroy all gems of the same color as adjacent gems
-        const targetColor = this.getAdjacentGemColor(cell)
+        // Destroy all gems of the same color
+        // If swapped with a gem, use that gem's color; otherwise pick adjacent color
+        let targetColor: string | null = null
+        if (swappedWith && !swappedWith.empty && !swappedWith.powerup && swappedWith.color) {
+          targetColor = swappedWith.color
+          console.log(`Light ball swapped with ${targetColor}, destroying all ${targetColor} gems`)
+        } else {
+          targetColor = this.getAdjacentGemColor(cell)
+          console.log(`Light ball clicked, picking adjacent color: ${targetColor}`)
+        }
+
         if (targetColor) {
           for (let row = 0; row < size; row++) {
             for (let col = 0; col < size; col++) {
@@ -1470,11 +1479,11 @@ export default class GameScene extends Phaser.Scene {
           console.log('=== POWER-UP SWAPPED (via drag)! ===')
           if (firstCell.powerup) {
             console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
-            this.triggerPowerUp(firstCell)
+            this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
           }
           if (secondCell.powerup) {
             console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
-            this.triggerPowerUp(secondCell)
+            this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
           }
           await this.destroyCells()
           await this.makeCellsFall()
