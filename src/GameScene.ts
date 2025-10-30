@@ -144,7 +144,9 @@ export default class GameScene extends Phaser.Scene {
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = row * CELL_SIZE + CELL_SIZE / 2
-        cell.sprite = this.add.sprite(x, y, cell.color).setInteractive()
+        cell.sprite = this.add.sprite(x, y, cell.color)
+          .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
+          .setInteractive()
       }
     }
   }
@@ -337,7 +339,9 @@ export default class GameScene extends Phaser.Scene {
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = (row - numberOfEmptyCells) * CELL_SIZE + CELL_SIZE / 2
-        cell.sprite = this.add.sprite(x, y, cell.color).setInteractive()
+        cell.sprite = this.add.sprite(x, y, cell.color)
+          .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
+          .setInteractive()
       }
     }
     await this.moveSpritesWhereTheyBelong()
