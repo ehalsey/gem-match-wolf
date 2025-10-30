@@ -23,8 +23,8 @@ type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'light-ball
  * Number of cells required to trigger an explosion
  */
 const explosionThreshold = 3
-const swapDuration = 180 // ms
-const destroyDuration = 180 // ms
+const swapDuration = 540 // ms (3x slower)
+const destroyDuration = 540 // ms (3x slower)
 
 type Cell = {
   row: number
@@ -405,6 +405,13 @@ export default class GameScene extends Phaser.Scene {
           powerUpType = 'vertical-rocket'  // 4 vertical → vertical rocket
         }
 
+        // Mark ALL cells in chain (except the power-up) for destruction
+        for (let i = 0; i < chain.length; i++) {
+          if (i !== middleIndex) {
+            chain[i].empty = true
+          }
+        }
+
         // Mark the power-up cell - this prevents it from being destroyed
         powerUpCell.powerup = powerUpType
 
@@ -667,7 +674,7 @@ export default class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: this.selectedCell.sprite,
       angle: 15,
-      duration: 100,
+      duration: 300,
       yoyo: true,
       ease: 'Sine.easeInOut'
     })
@@ -681,7 +688,7 @@ export default class GameScene extends Phaser.Scene {
       alpha: 0.85,
       yoyo: true,
       repeat: -1,
-      duration: 400
+      duration: 1200
     })
   }
 
