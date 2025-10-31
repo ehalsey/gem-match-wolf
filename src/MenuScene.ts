@@ -58,16 +58,20 @@ export default class MenuScene extends Phaser.Scene {
       this.registry.events.emit('NEW_GAME')
     })
 
+    const leaderboardButton = new TextButton(this, 0, 220, 'Leaderboard')
+    leaderboardButton.on('pointerup', () => {
+      this.scene.launch('LeaderboardScene')
+    })
+
     this.zone = this.add.zone(0, 0, MENU_WIDTH, MENU_HEIGHT).setOrigin(0)
     Phaser.Display.Align.In.TopCenter(this.scoreLabel, this.zone, 0, -20)
     Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, -60)
     Phaser.Display.Align.In.TopCenter(this.movesLabel, this.zone, 0, -120)
     Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, -160)
     Phaser.Display.Align.In.TopCenter(this.newGameButton, this.zone, 0, -250)
+    Phaser.Display.Align.In.TopCenter(leaderboardButton, this.zone, 0, -320)
 
     // TODO: hint button
-
-    // TODO: high scores
 
     this.registry.events.on('changedata', this.updateData, this)
   }
