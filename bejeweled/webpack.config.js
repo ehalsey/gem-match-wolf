@@ -2,6 +2,7 @@ const path = require('path')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const webpack = require('webpack')
+const packageJson = require('./package.json')
 
 module.exports = {
   entry: './src/index.ts',
@@ -23,7 +24,8 @@ module.exports = {
       ]
     }),
     new webpack.DefinePlugin({
-      'process.env.API_BASE_URL': JSON.stringify(process.env.API_BASE_URL || '/api')
+      'process.env.API_BASE_URL': JSON.stringify(process.env.API_BASE_URL || '/api'),
+      'APP_VERSION': JSON.stringify(packageJson.version)
     })
   ],
   module: {
