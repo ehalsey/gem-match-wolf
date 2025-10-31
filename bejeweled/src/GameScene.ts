@@ -351,7 +351,17 @@ export default class GameScene extends Phaser.Scene {
         // Activate the power-up without a swap
         this.triggerPowerUp(firstCell)
 
+        // Count destroyed cells for scoring
+        const destroyedCount = this.getCellsToDestroy().length
         await this.destroyCells()
+
+        // Award points for power-up destruction (50 points per gem)
+        if (destroyedCount > 0) {
+          const powerUpScore = destroyedCount * 50
+          this.setScore(this.score + powerUpScore)
+          console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
+        }
+
         await this.makeCellsFall()
         await this.refillBoard()
 
@@ -414,7 +424,18 @@ export default class GameScene extends Phaser.Scene {
         console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
         this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
       }
+
+      // Count destroyed cells for scoring
+      const destroyedCount = this.getCellsToDestroy().length
       await this.destroyCells()
+
+      // Award points for power-up destruction (50 points per gem)
+      if (destroyedCount > 0) {
+        const powerUpScore = destroyedCount * 50
+        this.setScore(this.score + powerUpScore)
+        console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
+      }
+
       await this.makeCellsFall()
       await this.refillBoard()
     }
@@ -2339,7 +2360,17 @@ export default class GameScene extends Phaser.Scene {
           // Activate the power-up without a swap
           this.triggerPowerUp(draggedCell)
 
+          // Count destroyed cells for scoring
+          const destroyedCount = this.getCellsToDestroy().length
           await this.destroyCells()
+
+          // Award points for power-up destruction (50 points per gem)
+          if (destroyedCount > 0) {
+            const powerUpScore = destroyedCount * 50
+            this.setScore(this.score + powerUpScore)
+            console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
+          }
+
           await this.makeCellsFall()
           await this.refillBoard()
 
@@ -2414,7 +2445,18 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
             this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
           }
+
+          // Count destroyed cells for scoring
+          const destroyedCount = this.getCellsToDestroy().length
           await this.destroyCells()
+
+          // Award points for power-up destruction (50 points per gem)
+          if (destroyedCount > 0) {
+            const powerUpScore = destroyedCount * 50
+            this.setScore(this.score + powerUpScore)
+            console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
+          }
+
           await this.makeCellsFall()
           await this.refillBoard()
         }
