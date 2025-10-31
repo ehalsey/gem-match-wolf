@@ -7,6 +7,7 @@ import {
   NUMBER_OF_CELLS_PER_ROW as size
 } from './constants'
 import { ConfirmPopup } from './ConfirmPopup'
+import { ScoreStorageService } from './ScoreStorageService'
 
 const gems = [
   'blue',
@@ -410,6 +411,9 @@ export default class GameScene extends Phaser.Scene {
   gameOver (message: string = 'Game Over') {
     this.isGameOver = true
 
+    // Update personal best
+    const isNewBest = ScoreStorageService.updatePersonalBest(this.score)
+
     const gameOverBackground = this.add.rectangle(0, 0, this.zone.width, this.zone.height)
       .setOrigin(0)
       .setFillStyle(0x000000, 0.8)
@@ -428,7 +432,15 @@ export default class GameScene extends Phaser.Scene {
       .setColor('#FFD700')
       .setFontStyle('bold')
 
-    const restartHint = this.add.text(0, 60, 'Click "New Game" to restart')
+    // Add new best indicator if applicable
+    const newBestText = isNewBest ? this.add.text(0, 40, '🎉 New Personal Best! 🎉')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(18)
+      .setColor('#00FF00')
+      .setFontStyle('bold') : null
+
+    const restartHint = this.add.text(0, isNewBest ? 70 : 60, 'Click "New Game" to restart')
       .setOrigin(0.5)
       .setFontFamily('Arial')
       .setFontSize(18)
@@ -438,12 +450,21 @@ export default class GameScene extends Phaser.Scene {
       .add(gameOverBackground)
       .add(gameOverTitle)
       .add(finalScoreText)
-      .add(restartHint)
       .setDepth(1)
+    
+    if (newBestText) {
+      this.gameOverScreen.add(newBestText)
+      Phaser.Display.Align.In.Center(newBestText, gameOverBackground, 0, 40)
+    }
+    
+    this.gameOverScreen.add(restartHint)
 
     Phaser.Display.Align.In.Center(gameOverTitle, gameOverBackground, 0, -50)
     Phaser.Display.Align.In.Center(finalScoreText, gameOverBackground, 0, 10)
-    Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, 60)
+    Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, isNewBest ? 70 : 60)
+
+    // Notify MenuScene to update personal best display
+    this.registry.events.emit('PERSONAL_BEST_UPDATED')
   }
 
   computeScore (chains: Cell[][], cascades: number): number {
