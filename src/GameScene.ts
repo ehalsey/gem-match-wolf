@@ -26,6 +26,11 @@ const explosionThreshold = 3
 const swapDuration = 540 // ms (3x slower)
 const destroyDuration = 540 // ms (3x slower)
 
+type Position = {
+  row: number
+  column: number
+}
+
 type Cell = {
   row: number
   column: number
@@ -50,7 +55,7 @@ export default class GameScene extends Phaser.Scene {
   debugGraphics: Phaser.GameObjects.Graphics
   debugMode: boolean
   testBoard: string | null
-  lastSwap: { from: Cell, to: Cell } | null
+  lastSwap: { from: Position, to: Position } | null
 
   constructor () {
     super({
@@ -297,10 +302,7 @@ export default class GameScene extends Phaser.Scene {
     this.moveInProgress = true
 
     // Track the swap for smart power-up positioning (capture positions before swap)
-    this.lastSwap = { 
-      from: { row: firstCell.row, column: firstCell.column } as Cell, 
-      to: { row: secondCell.row, column: secondCell.column } as Cell 
-    }
+    this.lastSwap = this.captureSwapContext(firstCell, secondCell)
 
     this.swapCells(firstCell, secondCell)
     this.sound.play('swap', { volume: 0.3 })
@@ -497,7 +499,7 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  detectSpecialPatterns (swapContext?: { from: Cell, to: Cell }): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
+  detectSpecialPatterns (swapContext?: { from: Position, to: Position }): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
     const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> = []
     const usedCells = new Set<Cell>()
 
@@ -524,12 +526,14 @@ export default class GameScene extends Phaser.Scene {
 
           // If we have swap context, determine direction and position accordingly
           if (swapContext) {
-            const swappedCell = squareCells.find(cell => 
-              (cell.row === swapContext.to.row && cell.column === swapContext.to.column) ||
-              (cell.row === swapContext.from.row && cell.column === swapContext.from.column)
-            )
+            // Check if any of the swap positions falls within the square bounds
+            const squareRowRange = [row, row + 1]
+            const squareColRange = [col, col + 1]
+            const isSwapInSquare = 
+              (squareRowRange.includes(swapContext.from.row) && squareColRange.includes(swapContext.from.column)) ||
+              (squareRowRange.includes(swapContext.to.row) && squareColRange.includes(swapContext.to.column))
 
-            if (swappedCell) {
+            if (isSwapInSquare) {
               // Determine horizontal direction of swap
               const swapFromLeft = swapContext.from.column < swapContext.to.column
               const swapFromRight = swapContext.from.column > swapContext.to.column
@@ -637,11 +641,11 @@ export default class GameScene extends Phaser.Scene {
     return patterns
   }
 
-  createPowerUpsFromChains (chains: Cell[][], swapContext?: { from: Cell, to: Cell } | null) {
+  createPowerUpsFromChains (chains: Cell[][], swapContext?: { from: Position, to: Position } | null) {
     let powerUpsCreated = false
 
     // First, check for special patterns (L-shapes and 2x2 squares)
-    const specialPatterns = this.detectSpecialPatterns(swapContext ?? undefined)
+    const specialPatterns = this.detectSpecialPatterns(swapContext || undefined)
 
     for (const pattern of specialPatterns) {
       powerUpsCreated = true
@@ -1361,6 +1365,13 @@ export default class GameScene extends Phaser.Scene {
     this.selectedCell = null
   }
 
+  captureSwapContext (firstCell: Cell, secondCell: Cell): { from: Position, to: Position } {
+    return {
+      from: { row: firstCell.row, column: firstCell.column },
+      to: { row: secondCell.row, column: secondCell.column }
+    }
+  }
+
   swapCells (firstCell: Cell, secondCell: Cell) {
     const firstCellCopy = { ...firstCell }
     firstCell.row = secondCell.row
@@ -1588,10 +1599,7 @@ export default class GameScene extends Phaser.Scene {
         this.draggedCell = null
 
         // Track the swap for smart power-up positioning (capture positions before swap)
-        this.lastSwap = { 
-          from: { row: firstCell.row, column: firstCell.column } as Cell, 
-          to: { row: secondCell.row, column: secondCell.column } as Cell 
-        }
+        this.lastSwap = this.captureSwapContext(firstCell, secondCell)
 
         this.swapCells(firstCell, secondCell)
         this.sound.play('swap', { volume: 0.3 })
