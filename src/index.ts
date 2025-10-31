@@ -6,6 +6,7 @@ import {
 } from './constants'
 import GameScene from './GameScene'
 import MenuScene from './MenuScene'
+import LeaderboardScene from './LeaderboardScene'
 
 declare global {
   interface Window {
@@ -18,7 +19,7 @@ const config: Phaser.Types.Core.GameConfig = {
   width: BOARD_SIZE + MENU_WIDTH,
   height: BOARD_SIZE,
   parent: document.getElementsByClassName('CanvasContainer')[0] as HTMLElement,
-  scene: [MenuScene, GameScene]
+  scene: [MenuScene, GameScene, LeaderboardScene]
 }
 
 const game = new Phaser.Game(config)

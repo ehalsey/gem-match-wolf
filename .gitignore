@@ -1,3 +1,7 @@
 node_modules/
 build/
 dist/
+nul
+sourcegem-match-wolf-clone/
+*.azurite/
+bejeweled/srcindex.ts

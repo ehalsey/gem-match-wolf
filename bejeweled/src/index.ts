@@ -1,0 +1,27 @@
+import * as Phaser from 'phaser'
+
+import {
+  BOARD_SIZE,
+  MENU_WIDTH
+} from './constants'
+import GameScene from './GameScene'
+import MenuScene from './MenuScene'
+import LeaderboardScene from './LeaderboardScene'
+
+declare global {
+  interface Window {
+    game: Phaser.Game
+  }
+}
+
+const config: Phaser.Types.Core.GameConfig = {
+  title: 'Bejeweled',
+  width: BOARD_SIZE + MENU_WIDTH,
+  height: BOARD_SIZE,
+  parent: document.getElementsByClassName('CanvasContainer')[0] as HTMLElement,
+  scene: [MenuScene, GameScene, LeaderboardScene]
+}
+
+const game = new Phaser.Game(config)
+
+window.game = game
