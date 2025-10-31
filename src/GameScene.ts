@@ -296,8 +296,11 @@ export default class GameScene extends Phaser.Scene {
 
     this.moveInProgress = true
 
-    // Track the swap for smart power-up positioning
-    this.lastSwap = { from: firstCell, to: secondCell }
+    // Track the swap for smart power-up positioning (capture positions before swap)
+    this.lastSwap = { 
+      from: { row: firstCell.row, column: firstCell.column } as Cell, 
+      to: { row: secondCell.row, column: secondCell.column } as Cell 
+    }
 
     this.swapCells(firstCell, secondCell)
     this.sound.play('swap', { volume: 0.3 })
@@ -531,12 +534,19 @@ export default class GameScene extends Phaser.Scene {
               const swapFromLeft = swapContext.from.column < swapContext.to.column
               const swapFromRight = swapContext.from.column > swapContext.to.column
 
+              console.log(`[FLY-AWAY] Swap detected: from [${swapContext.from.row}, ${swapContext.from.column}] to [${swapContext.to.row}, ${swapContext.to.column}]`)
+              console.log(`[FLY-AWAY] Direction: ${swapFromRight ? 'RIGHT-TO-LEFT' : swapFromLeft ? 'LEFT-TO-RIGHT' : 'VERTICAL'}`)
+
               if (swapFromRight) {
                 // Match made from right → position at lower right (bottomRight)
                 flyAwayCell = bottomRight
+                console.log(`[FLY-AWAY] Positioning at bottom-right [${bottomRight.row}, ${bottomRight.column}]`)
               } else if (swapFromLeft) {
                 // Match made from left → position at lower left (bottomLeft)
                 flyAwayCell = bottomLeft
+                console.log(`[FLY-AWAY] Positioning at bottom-left [${bottomLeft.row}, ${bottomLeft.column}]`)
+              } else {
+                console.log(`[FLY-AWAY] Positioning at default top-left [${topLeft.row}, ${topLeft.column}]`)
               }
               // Note: vertical swaps default to topLeft (original behavior)
             }
@@ -1577,8 +1587,11 @@ export default class GameScene extends Phaser.Scene {
         this.moveInProgress = true
         this.draggedCell = null
 
-        // Track the swap for smart power-up positioning
-        this.lastSwap = { from: firstCell, to: secondCell }
+        // Track the swap for smart power-up positioning (capture positions before swap)
+        this.lastSwap = { 
+          from: { row: firstCell.row, column: firstCell.column } as Cell, 
+          to: { row: secondCell.row, column: secondCell.column } as Cell 
+        }
 
         this.swapCells(firstCell, secondCell)
         this.sound.play('swap', { volume: 0.3 })
