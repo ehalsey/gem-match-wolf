@@ -23,6 +23,16 @@ This document describes how to deploy the Gem Match Wolf game to Azure.
 - **SKU**: Free
 - **Location**: West US 2
 
+### Storage Account
+- **Name**: `gemmatchscores`
+- **Location**: West US 2
+- **SKU**: Standard_LRS (Locally Redundant Storage)
+- **Purpose**: Stores high scores in Azure Table Storage
+- **Table Name**: `highscores`
+
+**Application Settings Configured:**
+- `AZURE_STORAGE_CONNECTION_STRING`: Configured in Static Web App settings for API access
+
 ## GitHub Actions Setup
 
 ### Required Secrets
