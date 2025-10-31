@@ -9,7 +9,7 @@ A modern match-3 puzzle game built with TypeScript, Phaser 3, and Webpack. Match
   - **Horizontal Rocket** - Destroys entire row (match 4 horizontally)
   - **Vertical Rocket** - Destroys entire column (match 4 vertically)
   - **Light Ball (Color Bomb)** - Destroys all gems of one color across entire board (match 5+ gems)
-  - **TNT** - Explodes in a cross pattern, destroying 4 adjacent cells (match L-shape)
+  - **TNT** - Explodes in all directions, destroying all 8 surrounding cells in a 3x3 area (match L-shape)
   - **Fly-Away** - Flies to best target and explodes twice in cross patterns (match 2x2 square)
 - **Drag and Drop Support** - Click-and-drag gems to swap them
 - **Floating Score Feedback** - See points earned right where you made the match
@@ -42,8 +42,8 @@ Power-ups are created automatically when you match gems in special patterns:
 
 #### Special Patterns
 - **Match L-shape** (5 gems in L formation) → Creates **TNT** 💣
-  - Explodes in a cross pattern (up, down, left, right)
-  - Destroys 4 adjacent cells plus the center
+  - Explodes in all 8 directions including corners (3x3 area)
+  - Destroys all surrounding cells for maximum impact
 - **Match 2x2 square** (4 gems in a square) → Creates **Fly-Away** 🚁
   - Explodes at starting position in cross pattern
   - Flies to the best strategic target on the board

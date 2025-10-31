@@ -18,6 +18,7 @@
 - [x] Light Ball / Color Bomb (match 5+)
   - [x] Color selection via swap
 - [x] TNT (match L-shape)
+  - [x] Destroys all 8 surrounding cells (3x3 area including corners)
 - [x] Fly-Away (match 2x2 square)
   - [x] Flying animation with orbit
   - [x] Intelligent target selection
