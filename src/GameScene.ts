@@ -50,6 +50,7 @@ export default class GameScene extends Phaser.Scene {
   debugGraphics: Phaser.GameObjects.Graphics
   debugMode: boolean
   testBoard: string | null
+  lastSwap: { from: Cell, to: Cell } | null
 
   constructor () {
     super({
@@ -295,6 +296,9 @@ export default class GameScene extends Phaser.Scene {
 
     this.moveInProgress = true
 
+    // Track the swap for smart power-up positioning
+    this.lastSwap = { from: firstCell, to: secondCell }
+
     this.swapCells(firstCell, secondCell)
     this.sound.play('swap', { volume: 0.3 })
 
@@ -329,7 +333,8 @@ export default class GameScene extends Phaser.Scene {
         this.logBoardState()
 
         // Create power-ups from chains of 4+ gems
-        this.createPowerUpsFromChains(chains)
+        // Pass swap context on first cascade, null on subsequent cascades
+        this.createPowerUpsFromChains(chains, cascades === 0 ? this.lastSwap : null)
 
         console.log('=== AFTER POWER-UP CREATION ===')
         this.logBoardState()
@@ -489,7 +494,7 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  detectSpecialPatterns (): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
+  detectSpecialPatterns (swapContext?: { from: Cell, to: Cell }): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
     const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> = []
     const usedCells = new Set<Cell>()
 
@@ -511,9 +516,34 @@ export default class GameScene extends Phaser.Scene {
           topLeft.color === bottomLeft.color &&
           topLeft.color === bottomRight.color
         ) {
-          // Found a 2x2 square! Create fly-away at top-left
+          // Found a 2x2 square! Position fly-away based on swap direction
+          let flyAwayCell = topLeft // default to top-left
+
+          // If we have swap context, determine direction and position accordingly
+          if (swapContext) {
+            const swappedCell = squareCells.find(cell => 
+              (cell.row === swapContext.to.row && cell.column === swapContext.to.column) ||
+              (cell.row === swapContext.from.row && cell.column === swapContext.from.column)
+            )
+
+            if (swappedCell) {
+              // Determine horizontal direction of swap
+              const swapFromLeft = swapContext.from.column < swapContext.to.column
+              const swapFromRight = swapContext.from.column > swapContext.to.column
+
+              if (swapFromRight) {
+                // Match made from right → position at lower right (bottomRight)
+                flyAwayCell = bottomRight
+              } else if (swapFromLeft) {
+                // Match made from left → position at lower left (bottomLeft)
+                flyAwayCell = bottomLeft
+              }
+              // Note: vertical swaps default to topLeft (original behavior)
+            }
+          }
+
           patterns.push({
-            cell: topLeft,
+            cell: flyAwayCell,
             type: 'fly-away',
             cells: squareCells
           })
@@ -597,11 +627,11 @@ export default class GameScene extends Phaser.Scene {
     return patterns
   }
 
-  createPowerUpsFromChains (chains: Cell[][]) {
+  createPowerUpsFromChains (chains: Cell[][], swapContext?: { from: Cell, to: Cell } | null) {
     let powerUpsCreated = false
 
     // First, check for special patterns (L-shapes and 2x2 squares)
-    const specialPatterns = this.detectSpecialPatterns()
+    const specialPatterns = this.detectSpecialPatterns(swapContext ?? undefined)
 
     for (const pattern of specialPatterns) {
       powerUpsCreated = true
@@ -1547,6 +1577,9 @@ export default class GameScene extends Phaser.Scene {
         this.moveInProgress = true
         this.draggedCell = null
 
+        // Track the swap for smart power-up positioning
+        this.lastSwap = { from: firstCell, to: secondCell }
+
         this.swapCells(firstCell, secondCell)
         this.sound.play('swap', { volume: 0.3 })
 
@@ -1587,7 +1620,8 @@ export default class GameScene extends Phaser.Scene {
             this.logBoardState()
 
             // Create power-ups from chains of 4+ gems
-            this.createPowerUpsFromChains(chains)
+            // Pass swap context on first cascade, null on subsequent cascades
+            this.createPowerUpsFromChains(chains, cascades === 0 ? this.lastSwap : null)
 
             console.log('=== AFTER POWER-UP CREATION (drag) ===')
             this.logBoardState()
