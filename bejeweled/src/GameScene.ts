@@ -2146,8 +2146,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   shouldExplode (cell: Cell): boolean {
-    // Power-ups don't explode as part of normal matches - they must be activated
-    if (cell.powerup) {
+    // Empty cells and power-ups don't explode as part of normal matches
+    if (cell.empty || cell.powerup) {
       return false
     }
     return this.shouldExplodeHorizontally(cell) || this.shouldExplodeVertically(cell)
