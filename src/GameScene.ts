@@ -48,12 +48,24 @@ export default class GameScene extends Phaser.Scene {
   isGameOver: boolean
   gameOverScreen: Phaser.GameObjects.Container
   debugGraphics: Phaser.GameObjects.Graphics
+  debugMode: boolean
+  testBoard: string | null
 
   constructor () {
     super({
       key: 'GameScene',
       active: true
     })
+  }
+
+  // Parse URL parameters for testing
+  getUrlParams () {
+    const params = new URLSearchParams(window.location.search)
+    return {
+      seed: params.get('seed'),
+      debug: params.get('debug') === 'true',
+      board: params.get('board')
+    }
   }
 
   preload () {
@@ -80,6 +92,30 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.setPosition(MENU_WIDTH, 0)
     this.zone = this.add.zone(0, 0, BOARD_SIZE, BOARD_SIZE).setOrigin(0)
 
+    // Parse URL parameters for testing
+    const params = this.getUrlParams()
+    this.debugMode = params.debug
+    this.testBoard = params.board
+
+    // Set seed if provided
+    if (params.seed) {
+      const seedValue = params.seed
+      Phaser.Math.RND.sow([seedValue])
+      console.log(`[DEBUG] Seed set to: ${seedValue}`)
+    }
+
+    // Log debug mode status
+    if (this.debugMode) {
+      console.log('[DEBUG] Debug mode enabled')
+      console.log('[DEBUG] Available console commands:')
+      console.log('  - gameDebug.setSeed(number)')
+      console.log('  - gameDebug.spawnPowerup(type, row, col)')
+      console.log('  - gameDebug.loadTestBoard(name)')
+      console.log('  - gameDebug.logBoard()')
+      console.log('  - gameDebug.getWinningMoves()')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, square, tnt-test')
+    }
+
     this.createBackground()
 
     // Create particle texture
@@ -93,6 +129,9 @@ export default class GameScene extends Phaser.Scene {
 
     this.setScore(0)
     this.setMoves(30)
+
+    // Expose debug commands to console (always available)
+    this.exposeDebugCommands()
 
     // TODO: clicking on "new game" triggers this...
     this.input.on('pointerdown', this.onPointerDown, this)
@@ -170,6 +209,12 @@ export default class GameScene extends Phaser.Scene {
   initBoard () {
     // Create empty board
     this.board = createEmptyBoard(size)
+
+    // Check if a test board was requested via URL
+    if (this.testBoard) {
+      this.loadTestBoard(this.testBoard)
+      return
+    }
 
     // Fill board
     for (let row = 0; row < size; row++) {
@@ -315,7 +360,13 @@ export default class GameScene extends Phaser.Scene {
       }
       const winningMoves = this.getWinningMoves()
       console.log(`${winningMoves.length} winning moves`)
-      if (winningMoves.length === 0) {
+      if (this.debugMode) {
+        console.log('[DEBUG] Board state after cascades:')
+        this.logBoard()
+        console.log('[DEBUG] Skipping "no more moves" check in debug mode')
+      }
+      // Skip game over check in debug mode to allow continued testing
+      if (winningMoves.length === 0 && !this.debugMode) {
         this.gameOver('No more moves!')
       }
     } else {
@@ -782,7 +833,7 @@ export default class GameScene extends Phaser.Scene {
         break
 
       case 'tnt':
-        // Destroy in a cross pattern (4 directions, 1 cell each)
+        // Destroy in a cross pattern (4 directions, 2 cells each)
         const directions = [
           { dr: -1, dc: 0 },  // up
           { dr: 1, dc: 0 },   // down
@@ -790,15 +841,18 @@ export default class GameScene extends Phaser.Scene {
           { dr: 0, dc: 1 }    // right
         ]
         for (const dir of directions) {
-          const targetRow = cell.row + dir.dr
-          const targetCol = cell.column + dir.dc
-          if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
-            const targetCell = this.board[targetRow][targetCol]
-            if (targetCell.powerup) {
-              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-              this.triggerPowerUp(targetCell)
-            } else {
-              targetCell.empty = true
+          // Extend blast radius to 2 cells in each direction
+          for (let distance = 1; distance <= 2; distance++) {
+            const targetRow = cell.row + (dir.dr * distance)
+            const targetCol = cell.column + (dir.dc * distance)
+            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+              const targetCell = this.board[targetRow][targetCol]
+              if (targetCell.powerup) {
+                console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+                this.triggerPowerUp(targetCell)
+              } else {
+                targetCell.empty = true
+              }
             }
           }
         }
@@ -1559,7 +1613,11 @@ export default class GameScene extends Phaser.Scene {
           }
           const winningMoves = this.getWinningMoves()
           console.log(`${winningMoves.length} winning moves`)
-          if (winningMoves.length === 0) {
+          if (this.debugMode) {
+            console.log('[DEBUG] Skipping "no more moves" check in debug mode')
+          }
+          // Skip game over check in debug mode to allow continued testing
+          if (winningMoves.length === 0 && !this.debugMode) {
             this.gameOver('No more moves!')
           }
         } else {
@@ -1583,6 +1641,203 @@ export default class GameScene extends Phaser.Scene {
     gameObject.y = this.dragStartY
     this.draggedCell = null
     this.updateDebugDisplay()
+  }
+
+  // ===== DEBUG / TESTING METHODS =====
+
+  exposeDebugCommands () {
+    // Make debug methods accessible via console
+    if (typeof window !== 'undefined') {
+      (window as any).gameDebug = {
+        setSeed: (seed: number) => this.setSeed(seed),
+        spawnPowerup: (type: PowerUpType, row: number, col: number) => this.spawnPowerup(type, row, col),
+        loadTestBoard: (name: string) => this.loadTestBoard(name),
+        logBoard: () => this.logBoard(),
+        getWinningMoves: () => this.getWinningMoves()
+      }
+    }
+  }
+
+  setSeed (seed: number) {
+    Phaser.Math.RND.sow([seed.toString()])
+    console.log(`[DEBUG] Random seed set to: ${seed}`)
+    console.log('[DEBUG] Restart the game to see the effect')
+  }
+
+  spawnPowerup (type: PowerUpType, row: number, col: number) {
+    if (row < 0 || row >= size || col < 0 || col >= size) {
+      console.error(`[DEBUG] Invalid position: [${row}, ${col}]`)
+      return
+    }
+
+    const cell = this.board[row][col]
+    if (cell.empty) {
+      console.error(`[DEBUG] Cannot spawn powerup on empty cell at [${row}, ${col}]`)
+      return
+    }
+
+    cell.powerup = type
+    cell.sprite.destroy()
+
+    const x = col * CELL_SIZE + CELL_SIZE / 2
+    const y = row * CELL_SIZE + CELL_SIZE / 2
+    cell.sprite = this.add.sprite(x, y, type)
+      .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+      .setInteractive({ draggable: true })
+
+    console.log(`[DEBUG] Spawned ${type} at [${row}, ${col}]`)
+  }
+
+  loadTestBoard (name: string) {
+    console.log(`[DEBUG] Loading test board: ${name}`)
+
+    // Handle special test boards with power-ups
+    if (name === 'tnt-test' || name === 'bomb-test') {
+      // Load a simple test board for TNT
+      const tntTestBoard = [
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = tntTestBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn TNT in the center
+      this.spawnPowerup('tnt', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with TNT at center [4, 4]`)
+      console.log('[DEBUG] Click the TNT to test blast radius (should destroy 2 cells in each direction)')
+      return
+    }
+
+    // Predefined test boards
+    const testBoards: { [key: string]: string[][] } = {
+      match5: [
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ],
+      lshape: [
+        ['red', 'red', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'green', 'red', 'white', 'orange', 'blue', 'red', 'green'],
+        ['yellow', 'white', 'red', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ],
+      square: [
+        ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
+        ['red', 'red', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ],
+      match4h: [
+        ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ],
+      match4v: [
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['red', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['red', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['red', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['white', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['blue', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['yellow', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow']
+      ]
+    }
+
+    if (!testBoards[name]) {
+      console.error(`[DEBUG] Test board '${name}' not found. Available: ${Object.keys(testBoards).join(', ')}`)
+      return
+    }
+
+    const boardConfig = testBoards[name]
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        const newColor = boardConfig[row][col]
+
+        // Only update if color is different OR sprite doesn't exist
+        if (cell.color !== newColor || !cell.sprite) {
+          // Destroy existing sprite if it exists
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+    }
+
+    console.log(`[DEBUG] Loaded test board: ${name}`)
+  }
+
+  logBoard () {
+    console.log('[DEBUG] Current Board State:')
+    for (let row = 0; row < size; row++) {
+      const rowData = []
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (cell.empty) {
+          rowData.push('____')
+        } else if (cell.powerup) {
+          rowData.push(`[${cell.powerup.substring(0, 4).toUpperCase()}]`)
+        } else {
+          rowData.push(cell.color.substring(0, 4).toUpperCase())
+        }
+      }
+      console.log(`Row ${row}: ${rowData.join(' | ')}`)
+    }
   }
 }
 
