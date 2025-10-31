@@ -27,6 +27,8 @@ Available test boards:
 - `match4h` - 4 blue gems horizontally (creates Horizontal Rocket)
 - `match4v` - 4 red gems vertically (creates Vertical Rocket)
 - `lshape` - Red L-shape pattern (creates TNT)
+- `rect3x2` - Blue 3x2 rectangle pattern (creates TNT)
+- `rect2x3` - Blue 2x3 rectangle pattern (creates TNT)
 - `square` - 2x2 red square (creates Fly-Away)
 - `tnt-test` or `bomb-test` - TNT already spawned in center (test blast radius)
 
@@ -81,6 +83,18 @@ Returns array of all valid moves that would create matches.
 2. Swap any gem in row 0 to complete the match
 3. Observe Light Ball creation and activation
 
+### Test 3x2 Rectangle
+1. Visit: `http://localhost:8000/?board=rect3x2`
+2. Swap any gem in rows 0-1, columns 0-2 to complete the rectangle
+3. Observe TNT creation in the center of the rectangle
+4. Swap the TNT to activate and see cross-pattern explosion
+
+### Test 2x3 Rectangle
+1. Visit: `http://localhost:8000/?board=rect2x3`
+2. Swap any gem in rows 0-2, columns 0-1 to complete the rectangle
+3. Observe TNT creation in the center of the rectangle
+4. Swap the TNT to activate and see cross-pattern explosion
+
 ### Test TNT Blast Radius (Quick)
 1. Visit: `http://localhost:8000/?board=tnt-test`
 2. Click the TNT in the center
@@ -123,7 +137,9 @@ Returns array of all valid moves that would create matches.
 | Horizontal rocket | `?board=match4h` |
 | Vertical rocket | `?board=match4v` |
 | TNT blast radius (instant) | `?board=tnt-test` |
-| TNT blast radius (create) | `?board=lshape` |
+| TNT blast radius (L-shape) | `?board=lshape` |
+| TNT from 3x2 rectangle | `?board=rect3x2` |
+| TNT from 2x3 rectangle | `?board=rect2x3` |
 | Fly-away double explosion | `?board=square` |
 | Specific seed | `?seed=42` |
 | Full debug mode | `?debug=true&seed=999` |
