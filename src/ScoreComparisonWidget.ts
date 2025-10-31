@@ -180,9 +180,10 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
     // Use previous target or 0 as baseline
     const leaderboard = ScoreStorageService.getLeaderboard()
     const playerRank = ScoreStorageService.getPlayerRank(currentScore)
-    // Fix: playerRank is 1-indexed, array is 0-indexed
-    const previousScore = playerRank <= leaderboard.length ? 
-      (leaderboard[playerRank] ? leaderboard[playerRank].score : 0) : 0
+    // playerRank is 1-indexed (1=first place). The player below is at rank+1, array index rank
+    // If playerRank is 5, the player below (rank 6) is at array index 5
+    const previousScore = playerRank < leaderboard.length ? 
+      leaderboard[playerRank].score : 0
     
     const range = targetScore - previousScore
     const progress = range > 0 ? (currentScore - previousScore) / range : 0
