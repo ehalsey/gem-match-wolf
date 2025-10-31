@@ -20,6 +20,21 @@ jobs:
         with:
           submodules: true
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            bejeweled/package-lock.json
+            api/package-lock.json
+
+      - name: Build API
+        run: |
+          cd api
+          npm ci
+          npm run build
+
       - name: Deploy to Azure Static Web Apps
         id: deploy
         uses: Azure/static-web-apps-deploy@v1
