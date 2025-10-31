@@ -45,6 +45,7 @@ jobs:
           app_location: "bejeweled"
           api_location: "api"
           output_location: "build"
+          skip_api_build: false
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
