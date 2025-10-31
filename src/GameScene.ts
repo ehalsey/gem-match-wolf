@@ -833,26 +833,27 @@ export default class GameScene extends Phaser.Scene {
         break
 
       case 'tnt':
-        // Destroy in a cross pattern (4 directions, 2 cells each)
+        // Destroy all 8 surrounding cells (3x3 area including corners)
         const directions = [
-          { dr: -1, dc: 0 },  // up
-          { dr: 1, dc: 0 },   // down
-          { dr: 0, dc: -1 },  // left
-          { dr: 0, dc: 1 }    // right
+          { dr: -1, dc: 0 },   // up
+          { dr: 1, dc: 0 },    // down
+          { dr: 0, dc: -1 },   // left
+          { dr: 0, dc: 1 },    // right
+          { dr: -1, dc: -1 },  // top-left (corner)
+          { dr: -1, dc: 1 },   // top-right (corner)
+          { dr: 1, dc: -1 },   // bottom-left (corner)
+          { dr: 1, dc: 1 }     // bottom-right (corner)
         ]
         for (const dir of directions) {
-          // Extend blast radius to 2 cells in each direction
-          for (let distance = 1; distance <= 2; distance++) {
-            const targetRow = cell.row + (dir.dr * distance)
-            const targetCol = cell.column + (dir.dc * distance)
-            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
-              const targetCell = this.board[targetRow][targetCol]
-              if (targetCell.powerup) {
-                console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-                this.triggerPowerUp(targetCell)
-              } else {
-                targetCell.empty = true
-              }
+          const targetRow = cell.row + dir.dr
+          const targetCol = cell.column + dir.dc
+          if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+            const targetCell = this.board[targetRow][targetCol]
+            if (targetCell.powerup) {
+              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+              this.triggerPowerUp(targetCell)
+            } else {
+              targetCell.empty = true
             }
           }
         }
@@ -1043,12 +1044,16 @@ export default class GameScene extends Phaser.Scene {
       })
       this.time.delayedCall(900, () => particles.destroy())
     } else if (powerUpType === 'tnt') {
-      // Create TNT cross explosion (4 directional bursts)
+      // Create TNT omnidirectional explosion (8 directional bursts including corners)
       const directions = [
-        { angle: 270, y: -1 },  // up
-        { angle: 90, y: 1 },    // down
-        { angle: 180, x: -1 },  // left
-        { angle: 0, x: 1 }      // right
+        { angle: 270, y: -1 },      // up
+        { angle: 90, y: 1 },        // down
+        { angle: 180, x: -1 },      // left
+        { angle: 0, x: 1 },         // right
+        { angle: 225, x: -1, y: 1 },  // bottom-left (corner)
+        { angle: 315, x: 1, y: 1 },   // bottom-right (corner)
+        { angle: 135, x: -1, y: -1 }, // top-left (corner)
+        { angle: 45, x: 1, y: -1 }    // top-right (corner)
       ]
       for (const dir of directions) {
         const offsetX = (dir.x || 0) * CELL_SIZE / 2
@@ -1730,7 +1735,7 @@ export default class GameScene extends Phaser.Scene {
       // Spawn TNT in the center
       this.spawnPowerup('tnt', 4, 4)
       console.log(`[DEBUG] Loaded ${name} with TNT at center [4, 4]`)
-      console.log('[DEBUG] Click the TNT to test blast radius (should destroy 2 cells in each direction)')
+      console.log('[DEBUG] Click the TNT to test blast radius (should destroy all 8 surrounding cells)')
       return
     }
 

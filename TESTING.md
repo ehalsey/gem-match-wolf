@@ -84,8 +84,8 @@ Returns array of all valid moves that would create matches.
 ### Test TNT Blast Radius (Quick)
 1. Visit: `http://localhost:8000/?board=tnt-test`
 2. Click the TNT in the center
-3. Observe: Should destroy 2 cells in each direction (up, down, left, right)
-4. Total: 9 cells destroyed (center + 8 surrounding in cross pattern)
+3. Observe: Should destroy all 8 surrounding cells (3x3 area including corners)
+4. Total: 9 cells destroyed (center + 8 surrounding cells in all directions)
 
 ### Test TNT with Specific Seed
 1. Visit: `http://localhost:8000/?debug=true&seed=777`
