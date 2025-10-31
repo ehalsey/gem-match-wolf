@@ -2,6 +2,7 @@ import * as Phaser from 'phaser'
 
 import { BOARD_SIZE, MENU_WIDTH } from './constants'
 import { TextButton } from './TextButton'
+import { ScoreComparisonWidget } from './ScoreComparisonWidget'
 
 const MENU_HEIGHT = BOARD_SIZE
 
@@ -12,6 +13,7 @@ export default class MenuScene extends Phaser.Scene {
   movesLabel: Phaser.GameObjects.Text
   movesValue: Phaser.GameObjects.Text
   newGameButton: Phaser.GameObjects.Text
+  scoreComparisonWidget: ScoreComparisonWidget
 
   constructor () {
     super({
@@ -65,17 +67,28 @@ export default class MenuScene extends Phaser.Scene {
     Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, -160)
     Phaser.Display.Align.In.TopCenter(this.newGameButton, this.zone, 0, -250)
 
-    // TODO: hint button
-
-    // TODO: high scores
+    // Score comparison widget
+    this.scoreComparisonWidget = new ScoreComparisonWidget(this, 10, 280, MENU_WIDTH - 20)
+    this.scoreComparisonWidget.update(0)
 
     this.registry.events.on('changedata', this.updateData, this)
+    this.registry.events.on('PERSONAL_BEST_UPDATED', this.onPersonalBestUpdated, this)
+  }
+
+  onPersonalBestUpdated () {
+    if (this.scoreComparisonWidget) {
+      this.scoreComparisonWidget.updatePersonalBest()
+    }
   }
 
   updateData (parent: any, key: string, data: any, previousData: any) {
     if (key === 'score') {
       this.scoreValue.setText(data)
       Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, -60)
+      // Update score comparison widget
+      if (this.scoreComparisonWidget) {
+        this.scoreComparisonWidget.update(data)
+      }
     } else if (key === 'moves') {
       this.movesValue.setText(data)
       // Change color based on moves remaining
