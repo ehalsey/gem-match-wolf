@@ -19,6 +19,7 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
   private lastScore: number
   private widgetWidth: number
   private readonly PROGRESS_BAR_HEIGHT = 8
+  private readonly PROGRESS_BAR_Y_OFFSET = 18 // Offset from text to bar
 
   constructor(scene: Phaser.Scene, x: number, y: number, width: number) {
     super(scene, x, y)
@@ -71,6 +72,7 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
    */
   private createProgressBar(): void {
     const startY = 70
+    const progressBarY = startY + this.PROGRESS_BAR_Y_OFFSET
 
     this.progressText = this.scene.add.text(0, startY, 'Next Target: ---')
       .setFontFamily('Arial')
@@ -81,7 +83,7 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
     // Progress bar background
     this.progressBarBg = this.scene.add.graphics()
     this.progressBarBg.fillStyle(0x333333, 0.8)
-    this.progressBarBg.fillRoundedRect(0, startY + 18, this.widgetWidth - 20, this.PROGRESS_BAR_HEIGHT, 4)
+    this.progressBarBg.fillRoundedRect(0, progressBarY, this.widgetWidth - 20, this.PROGRESS_BAR_HEIGHT, 4)
 
     // Progress bar fill
     this.progressBar = this.scene.add.graphics()
@@ -157,6 +159,7 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
    */
   private updateProgressBar(currentScore: number): void {
     const nextTarget = ScoreStorageService.getNextTarget(currentScore)
+    const progressBarY = 70 + this.PROGRESS_BAR_Y_OFFSET
     
     this.progressBar.clear()
 
@@ -165,7 +168,7 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
       this.progressText.setColor('#FFD700')
       // Fill bar completely with gold
       this.progressBar.fillStyle(0xFFD700, 1)
-      this.progressBar.fillRoundedRect(0, 88, this.widgetWidth - 20, this.PROGRESS_BAR_HEIGHT, 4)
+      this.progressBar.fillRoundedRect(0, progressBarY, this.widgetWidth - 20, this.PROGRESS_BAR_HEIGHT, 4)
       return
     }
 
@@ -177,7 +180,8 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
     // Use previous target or 0 as baseline
     const leaderboard = ScoreStorageService.getLeaderboard()
     const playerRank = ScoreStorageService.getPlayerRank(currentScore)
-    const previousScore = playerRank < leaderboard.length ? 
+    // Fix: playerRank is 1-indexed, array is 0-indexed
+    const previousScore = playerRank <= leaderboard.length ? 
       (leaderboard[playerRank] ? leaderboard[playerRank].score : 0) : 0
     
     const range = targetScore - previousScore
@@ -190,7 +194,7 @@ export class ScoreComparisonWidget extends Phaser.GameObjects.Container {
     else if (progress > 0.5) color = 0xFFD700 // gold
     
     this.progressBar.fillStyle(color, 1)
-    this.progressBar.fillRoundedRect(0, 88, progressWidth, this.PROGRESS_BAR_HEIGHT, 4)
+    this.progressBar.fillRoundedRect(0, progressBarY, progressWidth, this.PROGRESS_BAR_HEIGHT, 4)
   }
 
   /**
