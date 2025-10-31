@@ -5,7 +5,9 @@
   "scripts": {
     "build": "webpack --mode=production",
     "dev": "webpack serve --mode=development --open",
+    "dev:watch": "webpack serve --mode=development --port 8081",
     "start": "webpack serve --mode=development",
+    "play": "npm run build && npx serve dist -l 8080",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {

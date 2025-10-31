@@ -119,10 +119,32 @@ npm install
 ```
 
 ### Development
+
+#### Standard Development (single version)
 ```bash
 npm run dev
 ```
-Opens the game at http://localhost:8000 with hot-reload
+Opens the game at http://localhost:8080 with hot-reload
+
+#### Two-Version Workflow (play while developing)
+Allows you to keep playing a stable version while testing new features:
+
+**Terminal 1 - Stable Play Version:**
+```bash
+npm run play
+```
+Builds and serves stable version at http://localhost:8080 (won't auto-reload)
+
+**Terminal 2 - Development Version:**
+```bash
+npm run dev:watch
+```
+Runs dev server at http://localhost:8081 with hot-reload for testing changes
+
+**Workflow:**
+1. Start `npm run play` in one terminal - play the game here
+2. Start `npm run dev:watch` in another terminal - test new features here
+3. When ready to update the stable version, stop `npm run play` and restart it
 
 ### Production Build
 ```bash
