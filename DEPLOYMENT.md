@@ -54,7 +54,7 @@ The GitHub Actions workflow is located at `.github/workflows/azure-static-web-ap
    - Build the project (`npm run build`)
 
 3. **Deploy Steps**:
-   - Deploy the built files from `dist` directory to Azure Static Web Apps
+   - Deploy the built files from `build` directory to Azure Static Web Apps
 
 ## Manual Deployment
 
@@ -71,7 +71,7 @@ npm install
 npm run build
 
 # Deploy using the SWA CLI (install first: npm install -g @azure/static-web-apps-cli)
-swa deploy ./dist \
+swa deploy ./build \
   --deployment-token bf1fb627e643a8bd4890686b3f428b491a16af04ddf7dc3f07c9ec6583040f5e03-8f93b590-20f9-4c37-957a-507776b6552201e2431031cef01e \
   --app-name gem-match-wolf
 ```
@@ -147,14 +147,14 @@ Check the following:
 
 - Verify the `AZURE_STATIC_WEB_APPS_API_TOKEN` secret is set correctly
 - Check that the `app_location` path is correct in the workflow
-- Ensure the build output is in the `dist` folder
+- Ensure the build output is in the `build` folder
 
 ### Site Not Loading
 
 - Wait 1-2 minutes after deployment completes
 - Clear browser cache
 - Check the deployment history in Azure Portal
-- Verify the build produced output in the dist folder
+- Verify the build produced output in the build folder
 
 ## Security Best Practices
 
