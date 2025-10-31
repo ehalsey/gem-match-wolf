@@ -645,7 +645,7 @@ export default class GameScene extends Phaser.Scene {
     let powerUpsCreated = false
 
     // First, check for special patterns (L-shapes and 2x2 squares)
-    const specialPatterns = this.detectSpecialPatterns(swapContext || undefined)
+    const specialPatterns = this.detectSpecialPatterns(swapContext)
 
     for (const pattern of specialPatterns) {
       powerUpsCreated = true
