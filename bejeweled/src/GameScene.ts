@@ -7,6 +7,7 @@ import {
   NUMBER_OF_CELLS_PER_ROW as size
 } from './constants'
 import { ConfirmPopup } from './ConfirmPopup'
+import { Logger } from './Logger'
 import { GameSession } from './GameSession'
 import { HighScoreAPI } from './api/HighScoreAPI'
 import { LocalScores } from './LocalScores'
@@ -56,6 +57,7 @@ export default class GameScene extends Phaser.Scene {
   testBoard: string | null
   gameSession: GameSession
   highScoreAPI: HighScoreAPI
+  logger: Logger
 
   constructor () {
     super({
@@ -105,6 +107,9 @@ export default class GameScene extends Phaser.Scene {
     const params = this.getUrlParams()
     this.debugMode = params.debug
     this.testBoard = params.board
+
+    // Initialize logger
+    this.logger = new Logger('GameScene', this.debugMode)
 
     // Set seed if provided
     if (params.seed) {
@@ -333,9 +338,7 @@ export default class GameScene extends Phaser.Scene {
     if (destroyedCount > 0) {
       const powerUpScore = destroyedCount * POINTS_PER_GEM
       this.setScore(this.score + powerUpScore)
-      if (this.debugMode) {
-        console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
-      }
+      this.logger.debug(`Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
     }
 
     return destroyedCount
