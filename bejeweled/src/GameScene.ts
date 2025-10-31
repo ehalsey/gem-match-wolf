@@ -28,6 +28,7 @@ type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'color-bomb
 const explosionThreshold = 3
 const swapDuration = 540 // ms (3x slower)
 const destroyDuration = 540 // ms (3x slower)
+const POINTS_PER_GEM = 50 // Base points awarded per gem destroyed
 
 type Cell = {
   row: number
@@ -320,6 +321,26 @@ export default class GameScene extends Phaser.Scene {
     // Don't check for game over here - let it happen after all cascades finish
   }
 
+  /**
+   * Awards points for gems destroyed by power-up activation
+   * Counts cells marked for destruction, destroys them, and awards points
+   * @returns Number of gems destroyed
+   */
+  async awardPowerUpScore (): Promise<number> {
+    const destroyedCount = this.getCellsToDestroy().length
+    await this.destroyCells()
+
+    if (destroyedCount > 0) {
+      const powerUpScore = destroyedCount * POINTS_PER_GEM
+      this.setScore(this.score + powerUpScore)
+      if (this.debugMode) {
+        console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
+      }
+    }
+
+    return destroyedCount
+  }
+
   async onPointerDown (pointer: Phaser.Input.Pointer) {
     // console.log('pointer down', { ...pointer })
 
@@ -351,16 +372,8 @@ export default class GameScene extends Phaser.Scene {
         // Activate the power-up without a swap
         this.triggerPowerUp(firstCell)
 
-        // Count destroyed cells for scoring
-        const destroyedCount = this.getCellsToDestroy().length
-        await this.destroyCells()
-
-        // Award points for power-up destruction (50 points per gem)
-        if (destroyedCount > 0) {
-          const powerUpScore = destroyedCount * 50
-          this.setScore(this.score + powerUpScore)
-          console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
-        }
+        // Count destroyed cells, destroy them, and award points
+        await this.awardPowerUpScore()
 
         await this.makeCellsFall()
         await this.refillBoard()
@@ -425,16 +438,8 @@ export default class GameScene extends Phaser.Scene {
         this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
       }
 
-      // Count destroyed cells for scoring
-      const destroyedCount = this.getCellsToDestroy().length
-      await this.destroyCells()
-
-      // Award points for power-up destruction (50 points per gem)
-      if (destroyedCount > 0) {
-        const powerUpScore = destroyedCount * 50
-        this.setScore(this.score + powerUpScore)
-        console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
-      }
+      // Count destroyed cells, destroy them, and award points
+      await this.awardPowerUpScore()
 
       await this.makeCellsFall()
       await this.refillBoard()
@@ -2360,16 +2365,8 @@ export default class GameScene extends Phaser.Scene {
           // Activate the power-up without a swap
           this.triggerPowerUp(draggedCell)
 
-          // Count destroyed cells for scoring
-          const destroyedCount = this.getCellsToDestroy().length
-          await this.destroyCells()
-
-          // Award points for power-up destruction (50 points per gem)
-          if (destroyedCount > 0) {
-            const powerUpScore = destroyedCount * 50
-            this.setScore(this.score + powerUpScore)
-            console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
-          }
+          // Count destroyed cells, destroy them, and award points
+          await this.awardPowerUpScore()
 
           await this.makeCellsFall()
           await this.refillBoard()
@@ -2446,16 +2443,8 @@ export default class GameScene extends Phaser.Scene {
             this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
           }
 
-          // Count destroyed cells for scoring
-          const destroyedCount = this.getCellsToDestroy().length
-          await this.destroyCells()
-
-          // Award points for power-up destruction (50 points per gem)
-          if (destroyedCount > 0) {
-            const powerUpScore = destroyedCount * 50
-            this.setScore(this.score + powerUpScore)
-            console.log(`[POWER-UP] Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
-          }
+          // Count destroyed cells, destroy them, and award points
+          await this.awardPowerUpScore()
 
           await this.makeCellsFall()
           await this.refillBoard()
