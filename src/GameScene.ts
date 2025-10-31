@@ -1050,10 +1050,10 @@ export default class GameScene extends Phaser.Scene {
         { angle: 90, y: 1 },        // down
         { angle: 180, x: -1 },      // left
         { angle: 0, x: 1 },         // right
-        { angle: 225, x: -1, y: 1 },  // bottom-left (corner)
-        { angle: 315, x: 1, y: 1 },   // bottom-right (corner)
-        { angle: 135, x: -1, y: -1 }, // top-left (corner)
-        { angle: 45, x: 1, y: -1 }    // top-right (corner)
+        { angle: 225, x: -1, y: -1 },  // top-left (corner)
+        { angle: 315, x: 1, y: -1 },   // top-right (corner)
+        { angle: 135, x: -1, y: 1 },   // bottom-left (corner)
+        { angle: 45, x: 1, y: 1 }      // bottom-right (corner)
       ]
       for (const dir of directions) {
         const offsetX = (dir.x || 0) * CELL_SIZE / 2
