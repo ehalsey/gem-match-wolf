@@ -119,7 +119,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.loadTestBoard(name)')
       console.log('  - gameDebug.logBoard()')
       console.log('  - gameDebug.getWinningMoves()')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, square, tnt-test')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, rect3x2, rect2x3, square, tnt-test')
     }
 
     this.createBackground()
@@ -503,6 +503,54 @@ export default class GameScene extends Phaser.Scene {
     const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> = []
     const usedCells = new Set<Cell>()
 
+    // Detect 3x2 and 2x3 rectangles for TNT (check before 2x2 squares since they're larger)
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const topLeft = this.board[row][col]
+        if (topLeft.empty || topLeft.powerup || usedCells.has(topLeft)) continue
+
+        // 3x2 horizontal rectangle (3 columns, 2 rows)
+        if (col <= size - 3 && row <= size - 2) {
+          const cells = [
+            this.board[row][col],
+            this.board[row][col + 1],
+            this.board[row][col + 2],
+            this.board[row + 1][col],
+            this.board[row + 1][col + 1],
+            this.board[row + 1][col + 2]
+          ]
+
+          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color) &&
+              cells.every(c => !usedCells.has(c))) {
+            // Place power-up in center of rectangle (middle of top row)
+            patterns.push({ cell: this.board[row][col + 1], type: 'tnt', cells })
+            cells.forEach(cell => usedCells.add(cell))
+            continue
+          }
+        }
+
+        // 2x3 vertical rectangle (2 columns, 3 rows)
+        if (col <= size - 2 && row <= size - 3) {
+          const cells = [
+            this.board[row][col],
+            this.board[row][col + 1],
+            this.board[row + 1][col],
+            this.board[row + 1][col + 1],
+            this.board[row + 2][col],
+            this.board[row + 2][col + 1]
+          ]
+
+          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color) &&
+              cells.every(c => !usedCells.has(c))) {
+            // Place power-up in center of rectangle (middle row, left column)
+            patterns.push({ cell: this.board[row + 1][col], type: 'tnt', cells })
+            cells.forEach(cell => usedCells.add(cell))
+            continue
+          }
+        }
+      }
+    }
+
     // Detect 2x2 squares for Fly Away
     for (let row = 0; row < size - 1; row++) {
       for (let col = 0; col < size - 1; col++) {
@@ -646,6 +694,13 @@ export default class GameScene extends Phaser.Scene {
 
     // First, check for special patterns (L-shapes and 2x2 squares)
     const specialPatterns = this.detectSpecialPatterns(swapContext)
+
+    if (this.debugMode && specialPatterns.length > 0) {
+      console.log(`[DEBUG] Detected ${specialPatterns.length} special pattern(s)`)
+      specialPatterns.forEach((p, i) => {
+        console.log(`  Pattern ${i + 1}: ${p.type} at [${p.cell.row}, ${p.cell.column}]`)
+      })
+    }
 
     for (const pattern of specialPatterns) {
       powerUpsCreated = true
@@ -1831,6 +1886,26 @@ export default class GameScene extends Phaser.Scene {
         ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
         ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
         ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ],
+      'rect3x2': [
+        ['green', 'blue', 'blue', 'yellow', 'white', 'orange', 'red', 'green'],
+        ['blue', 'blue', 'blue', 'white', 'orange', 'red', 'green', 'yellow'],
+        ['yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
+        ['white', 'orange', 'red', 'green', 'yellow', 'white', 'orange', 'red'],
+        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'red', 'green'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
+        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white']
+      ],
+      'rect2x3': [
+        ['green', 'blue', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
+        ['blue', 'blue', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
+        ['blue', 'blue', 'orange', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
+        ['white', 'orange', 'red', 'green', 'yellow', 'white', 'orange', 'red'],
+        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'red', 'green'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
+        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white']
       ],
       match4h: [
         ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'white'],
