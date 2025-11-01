@@ -1,16 +1,13 @@
 {
   "name": "bejeweled",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Bejeweled",
   "scripts": {
     "build": "webpack --mode=production",
     "dev": "webpack serve --mode=development --open",
     "dev:watch": "webpack serve --mode=development --port 8081",
     "start": "webpack serve --mode=development",
-    "play": "npm run build && npx serve dist -l 8080",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:ci": "playwright test --reporter=dot",
+    "play": "webpack serve --mode=production --port 8082 --no-hot --open",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
@@ -18,7 +15,6 @@
     "phaser": "^3.80.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.56.1",
     "@types/crypto-js": "^4.2.2",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",

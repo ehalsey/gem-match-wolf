@@ -9,7 +9,7 @@ A modern match-3 puzzle game built with TypeScript, Phaser 3, and Webpack. Match
   - **Horizontal Rocket** - Destroys entire row (match 4 horizontally)
   - **Vertical Rocket** - Destroys entire column (match 4 vertically)
   - **Light Ball (Color Bomb)** - Destroys all gems of one color across entire board (match 5+ gems)
-  - **TNT** - Explodes in a cross pattern, destroying 4 adjacent cells (match L-shape, 3x2 rectangle, or 2x3 rectangle)
+  - **TNT** - Explodes in a cross pattern, destroying 4 adjacent cells (match L-shape)
   - **Fly-Away** - Flies to best target and explodes twice in cross patterns (match 2x2 square)
 - **Drag and Drop Support** - Click-and-drag gems to swap them
 - **Floating Score Feedback** - See points earned right where you made the match
@@ -44,12 +44,6 @@ Power-ups are created automatically when you match gems in special patterns:
 - **Match L-shape** (5 gems in L formation) → Creates **TNT** 💣
   - Explodes in a cross pattern (up, down, left, right)
   - Destroys 4 adjacent cells plus the center
-- **Match 3x2 rectangle** (6 gems in 3 columns × 2 rows) → Creates **TNT** 💣
-  - Same explosive power as L-shape
-  - Explodes in a cross pattern destroying 4 adjacent cells plus the center
-- **Match 2x3 rectangle** (6 gems in 2 columns × 3 rows) → Creates **TNT** 💣
-  - Same explosive power as L-shape
-  - Explodes in a cross pattern destroying 4 adjacent cells plus the center
 - **Match 2x2 square** (4 gems in a square) → Creates **Fly-Away** 🚁
   - Explodes at starting position in cross pattern
   - Flies to the best strategic target on the board
@@ -135,22 +129,23 @@ Opens the game at http://localhost:8080 with hot-reload
 #### Two-Version Workflow (play while developing)
 Allows you to keep playing a stable version while testing new features:
 
-**Terminal 1 - Stable Play Version:**
+**Stable Play Version:**
 ```bash
-npm run play
+npm run build:play
 ```
-Builds and serves stable version at http://localhost:8080 (won't auto-reload)
+Builds and opens game directly in browser (no server, no auto-reload)
 
-**Terminal 2 - Development Version:**
+**Development Version (in a separate terminal):**
 ```bash
 npm run dev:watch
 ```
 Runs dev server at http://localhost:8081 with hot-reload for testing changes
 
 **Workflow:**
-1. Start `npm run play` in one terminal - play the game here
-2. Start `npm run dev:watch` in another terminal - test new features here
-3. When ready to update the stable version, stop `npm run play` and restart it
+1. Run `npm run build:play` - opens stable version in your browser
+2. Run `npm run dev:watch` in a terminal - test new features at localhost:8081
+3. Keep playing the stable version - it won't change when code updates
+4. When ready for latest features, run `npm run build:play` again
 
 ### Production Build
 ```bash

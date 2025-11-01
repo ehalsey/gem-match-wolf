@@ -23,14 +23,15 @@ Enables console logging, exposes debug commands, and **disables "no more moves" 
 http://localhost:8000/?board=match5
 ```
 Available test boards:
-- `match5` - 5 blue gems in a row (creates Light Ball)
+- `match5` - 5 blue gems in a row (creates Color Bomb)
 - `match4h` - 4 blue gems horizontally (creates Horizontal Rocket)
 - `match4v` - 4 red gems vertically (creates Vertical Rocket)
 - `lshape` - Red L-shape pattern (creates TNT)
-- `rect3x2` - Blue 3x2 rectangle pattern (creates TNT)
-- `rect2x3` - Blue 2x3 rectangle pattern (creates TNT)
 - `square` - 2x2 red square (creates Fly-Away)
 - `tnt-test` or `bomb-test` - TNT already spawned in center (test blast radius)
+- `fly-away-test` or `flyaway-test` - Fly-Away already spawned in center (test double explosion)
+- `rocket-flyaway-test` - Rocket + Fly-Away combinations
+- `combo-test` or `combination-test` - Multiple power-ups for testing combinations
 
 ### Combine Parameters
 ```
@@ -49,13 +50,13 @@ Note: Restart the game to see the effect.
 
 ### Spawn a Power-Up
 ```javascript
-gameDebug.spawnPowerup('light-ball', 4, 4)
+gameDebug.spawnPowerup('color-bomb', 4, 4)
 ```
 Power-up types:
 - `'horizontal-rocket'`
 - `'vertical-rocket'`
 - `'tnt'`
-- `'light-ball'`
+- `'color-bomb'`
 - `'fly-away'`
 
 ### Load a Test Board
@@ -78,28 +79,38 @@ Returns array of all valid moves that would create matches.
 
 ## Testing Workflow Examples
 
-### Test Light Ball (5-Match)
-1. Visit: `http://localhost:8000/?board=match5`
+### Test Color Bomb (5-Match)
+1. Visit: `http://localhost:8000/?board=match5&debug=true`
 2. Swap any gem in row 0 to complete the match
-3. Observe Light Ball creation and activation
-
-### Test 3x2 Rectangle
-1. Visit: `http://localhost:8000/?board=rect3x2`
-2. Swap any gem in rows 0-1, columns 0-2 to complete the rectangle
-3. Observe TNT creation in the center of the rectangle
-4. Swap the TNT to activate and see cross-pattern explosion
-
-### Test 2x3 Rectangle
-1. Visit: `http://localhost:8000/?board=rect2x3`
-2. Swap any gem in rows 0-2, columns 0-1 to complete the rectangle
-3. Observe TNT creation in the center of the rectangle
-4. Swap the TNT to activate and see cross-pattern explosion
+3. Observe Color Bomb creation and activation
 
 ### Test TNT Blast Radius (Quick)
 1. Visit: `http://localhost:8000/?board=tnt-test`
-2. Click the TNT in the center
+2. Click the TNT twice (or swap it with any adjacent gem)
 3. Observe: Should destroy 2 cells in each direction (up, down, left, right)
 4. Total: 9 cells destroyed (center + 8 surrounding in cross pattern)
+
+### Test Fly-Away Double Explosion (Quick)
+1. Visit: `http://localhost:8000/?board=fly-away-test`
+2. Click the Fly-Away twice (or swap it with any adjacent gem)
+3. Observe: First explosion at start position, then flies to best target, second explosion at target
+4. Total: Two cross-pattern explosions (5 cells each)
+
+### Test Rocket + Fly-Away Combo (Quick)
+1. Visit: `http://localhost:8000/?board=rocket-flyaway-test`
+2. Swap Horizontal Rocket with Fly-Away (at [3,3] and [3,4])
+3. Observe: Fly-away finds best target, then destroys entire row at that location
+4. Swap Vertical Rocket with Fly-Away (at [5,3] and [5,4])
+5. Observe: Fly-away finds best target, then destroys entire column at that location
+
+### Test Power-Up Combinations (Quick)
+1. Visit: `http://localhost:8000/?board=combo-test`
+2. Swap Horizontal Rocket with Vertical Rocket (at [2,2] and [2,3])
+3. Observe: Giant cross - entire row AND column destroyed
+4. Swap the two TNTs together (at [4,2] and [4,3])
+5. Observe: Mega explosion - 5x5 blast area
+6. Swap the two Color Bombs together (at [6,5] and [6,6])
+7. Observe: **ENTIRE BOARD CLEARS!**
 
 ### Test TNT with Specific Seed
 1. Visit: `http://localhost:8000/?debug=true&seed=777`
@@ -112,7 +123,7 @@ Returns array of all valid moves that would create matches.
 1. Visit: `http://localhost:8000/?debug=true`
 2. Open console
 3. Spawn a TNT: `gameDebug.spawnPowerup('tnt', 3, 3)`
-4. Click it to test the blast radius
+4. Click the TNT twice to activate it and test the blast radius
 
 ### Debug Specific Scenario
 1. Play normally until you find an interesting board state
@@ -123,6 +134,7 @@ Returns array of all valid moves that would create matches.
 ## Tips
 
 - **Quick Testing**: Use URL parameters to instantly set up test scenarios
+- **Activate Power-Ups**: Click any power-up twice (select, then click again) to activate it in place without swapping
 - **Reproducible Bugs**: Share seed values to reproduce specific board states
 - **No Rebuild**: All commands work at runtime - no need to restart dev server
 - **Debug Logging**: Enable `?debug=true` to see helpful console messages
@@ -137,9 +149,10 @@ Returns array of all valid moves that would create matches.
 | Horizontal rocket | `?board=match4h` |
 | Vertical rocket | `?board=match4v` |
 | TNT blast radius (instant) | `?board=tnt-test` |
-| TNT blast radius (L-shape) | `?board=lshape` |
-| TNT from 3x2 rectangle | `?board=rect3x2` |
-| TNT from 2x3 rectangle | `?board=rect2x3` |
-| Fly-away double explosion | `?board=square` |
+| TNT blast radius (create) | `?board=lshape` |
+| Fly-away (instant test) | `?board=fly-away-test` |
+| Fly-away (create from 2x2) | `?board=square` |
+| Rocket + Fly-Away combos | `?board=rocket-flyaway-test` |
+| Power-up combinations | `?board=combo-test` |
 | Specific seed | `?seed=42` |
 | Full debug mode | `?debug=true&seed=999` |

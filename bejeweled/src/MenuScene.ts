@@ -2,9 +2,11 @@ import * as Phaser from 'phaser'
 
 import { BOARD_SIZE, MENU_WIDTH } from './constants'
 import { TextButton } from './TextButton'
-import { ScoreComparisonWidget } from './ScoreComparisonWidget'
 
 const MENU_HEIGHT = BOARD_SIZE
+
+// Version injected at build time by webpack
+declare const APP_VERSION: string
 
 export default class MenuScene extends Phaser.Scene {
   zone: Phaser.GameObjects.Zone
@@ -13,7 +15,7 @@ export default class MenuScene extends Phaser.Scene {
   movesLabel: Phaser.GameObjects.Text
   movesValue: Phaser.GameObjects.Text
   newGameButton: Phaser.GameObjects.Text
-  scoreComparisonWidget: ScoreComparisonWidget
+  versionText: Phaser.GameObjects.Text
 
   constructor () {
     super({
@@ -65,6 +67,13 @@ export default class MenuScene extends Phaser.Scene {
       this.scene.launch('LeaderboardScene')
     })
 
+    // Version display at bottom
+    this.versionText = this.add.text(0, 0, `v${APP_VERSION}`)
+      .setFontFamily('Arial')
+      .setFontSize(14)
+      .setColor('#888888')
+      .setAlign('center')
+
     this.zone = this.add.zone(0, 0, MENU_WIDTH, MENU_HEIGHT).setOrigin(0)
     Phaser.Display.Align.In.TopCenter(this.scoreLabel, this.zone, 0, -20)
     Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, -60)
@@ -72,31 +81,17 @@ export default class MenuScene extends Phaser.Scene {
     Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, -160)
     Phaser.Display.Align.In.TopCenter(this.newGameButton, this.zone, 0, -250)
     Phaser.Display.Align.In.TopCenter(leaderboardButton, this.zone, 0, -320)
-
-    // Score comparison widget
-    this.scoreComparisonWidget = new ScoreComparisonWidget(this, 10, 280, MENU_WIDTH - 20)
-    this.scoreComparisonWidget.update(0)
+    Phaser.Display.Align.In.BottomCenter(this.versionText, this.zone, 0, -10)
 
     // TODO: hint button
 
     this.registry.events.on('changedata', this.updateData, this)
-    this.registry.events.on('PERSONAL_BEST_UPDATED', this.onPersonalBestUpdated, this)
-  }
-
-  onPersonalBestUpdated () {
-    if (this.scoreComparisonWidget) {
-      this.scoreComparisonWidget.updatePersonalBest()
-    }
   }
 
   updateData (parent: any, key: string, data: any, previousData: any) {
     if (key === 'score') {
       this.scoreValue.setText(data)
       Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, -60)
-      // Update score comparison widget
-      if (this.scoreComparisonWidget) {
-        this.scoreComparisonWidget.update(data)
-      }
     } else if (key === 'moves') {
       this.movesValue.setText(data)
       // Change color based on moves remaining

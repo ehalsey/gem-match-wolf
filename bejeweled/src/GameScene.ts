@@ -7,7 +7,10 @@ import {
   NUMBER_OF_CELLS_PER_ROW as size
 } from './constants'
 import { ConfirmPopup } from './ConfirmPopup'
-import { ScoreStorageService } from './ScoreStorageService'
+import { Logger } from './Logger'
+import { GameSession } from './GameSession'
+import { HighScoreAPI } from './api/HighScoreAPI'
+import { LocalScores } from './LocalScores'
 
 const gems = [
   'blue',
@@ -18,7 +21,7 @@ const gems = [
   'yellow'
 ]
 
-type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'light-ball' | 'fly-away' | null
+type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'color-bomb' | 'fly-away' | null
 
 /**
  * Number of cells required to trigger an explosion
@@ -26,6 +29,7 @@ type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'light-ball
 const explosionThreshold = 3
 const swapDuration = 540 // ms (3x slower)
 const destroyDuration = 540 // ms (3x slower)
+const POINTS_PER_GEM = 50 // Base points awarded per gem destroyed
 
 type Position = {
   row: number
@@ -56,6 +60,9 @@ export default class GameScene extends Phaser.Scene {
   debugGraphics: Phaser.GameObjects.Graphics
   debugMode: boolean
   testBoard: string | null
+  gameSession: GameSession
+  highScoreAPI: HighScoreAPI
+  logger: Logger
   lastSwap: { from: Position, to: Position } | null
 
   constructor () {
@@ -71,7 +78,10 @@ export default class GameScene extends Phaser.Scene {
     return {
       seed: params.get('seed'),
       debug: params.get('debug') === 'true',
-      board: params.get('board')
+      board: params.get('board'),
+      testEndGame: params.get('testEndGame'),
+      score: params.get('score') ? parseInt(params.get('score')!, 10) : null,
+      moves: params.get('moves') ? parseInt(params.get('moves')!, 10) : null
     }
   }
 
@@ -82,7 +92,7 @@ export default class GameScene extends Phaser.Scene {
     this.load.image('horizontal-rocket', 'assets/horizontal-rocket.png')
     this.load.image('vertical-rocket', 'assets/vertical-rocket.png')
     this.load.image('tnt', 'assets/tnt.png')
-    this.load.image('light-ball', 'assets/light-ball.png')
+    this.load.image('color-bomb', 'assets/color-bomb.png')
     this.load.image('fly-away', 'assets/fly-away.png')
 
     // Load sound effects
@@ -92,7 +102,7 @@ export default class GameScene extends Phaser.Scene {
     this.load.audio('explode', 'assets/sounds/MatchItemExplodeSound.mp3')
     this.load.audio('booster-created', 'assets/sounds/BoosterCreationSound.mp3')
     this.load.audio('rocket', 'assets/sounds/Rocket.mp3')
-    this.load.audio('light-ball-sound', 'assets/sounds/LightBallPoweringEffect.wav')
+    this.load.audio('color-bomb-sound', 'assets/sounds/LightBallPoweringEffect.wav')
   }
 
   create () {
@@ -104,12 +114,19 @@ export default class GameScene extends Phaser.Scene {
     this.debugMode = params.debug
     this.testBoard = params.board
 
+    // Initialize logger
+    this.logger = new Logger('GameScene', this.debugMode)
+
     // Set seed if provided
     if (params.seed) {
       const seedValue = params.seed
       Phaser.Math.RND.sow([seedValue])
       console.log(`[DEBUG] Seed set to: ${seedValue}`)
     }
+
+    // Initialize game session and API client
+    this.gameSession = new GameSession(params.seed || undefined)
+    this.highScoreAPI = new HighScoreAPI()
 
     // Log debug mode status
     if (this.debugMode) {
@@ -120,7 +137,12 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.loadTestBoard(name)')
       console.log('  - gameDebug.logBoard()')
       console.log('  - gameDebug.getWinningMoves()')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, rect3x2, rect2x3, square, tnt-test')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, square, tnt-test, fly-away-test, rocket-flyaway-test, combo-test')
+      console.log('[DEBUG] Test end-game scenarios:')
+      console.log('  - ?testEndGame=win (high score, 1 move left)')
+      console.log('  - ?testEndGame=lose (low score, 1 move left)')
+      console.log('  - ?testEndGame=immediate (game over immediately)')
+      console.log('  - ?score=X&moves=Y (custom score and moves)')
     }
 
     this.createBackground()
@@ -134,11 +156,52 @@ export default class GameScene extends Phaser.Scene {
 
     this.initBoard()
 
-    this.setScore(0)
-    this.setMoves(30)
+    // Set initial score and moves (can be overridden by query params)
+    let initialScore = 0
+    let initialMoves = 30
+
+    // Handle test scenarios
+    if (params.testEndGame === 'win') {
+      // High score winning scenario
+      initialScore = 10000
+      initialMoves = 1
+      console.log('[TEST] Win scenario: High score with 1 move left')
+    } else if (params.testEndGame === 'lose') {
+      // Low score losing scenario
+      initialScore = 100
+      initialMoves = 1
+      console.log('[TEST] Lose scenario: Low score with 1 move left')
+    } else if (params.testEndGame === 'immediate') {
+      // Trigger game over immediately
+      initialScore = params.score !== null ? params.score : 5000
+      initialMoves = 0
+      console.log('[TEST] Immediate game over scenario')
+    }
+
+    // Override with specific query params if provided
+    if (params.score !== null) {
+      initialScore = params.score
+      console.log(`[TEST] Score set to: ${initialScore}`)
+    }
+    if (params.moves !== null) {
+      initialMoves = params.moves
+      console.log(`[TEST] Moves set to: ${initialMoves}`)
+    }
+
+    this.setScore(initialScore)
+    this.setMoves(initialMoves)
 
     // Expose debug commands to console (always available)
     this.exposeDebugCommands()
+
+    // Trigger game over immediately if starting with 0 moves (test scenario)
+    if (initialMoves === 0) {
+      console.log('[TEST] Starting with 0 moves, triggering game over immediately')
+      // Use a small delay to ensure the scene is fully initialized
+      this.time.delayedCall(100, () => {
+        this.gameOver('Out of moves!')
+      })
+    }
 
     // TODO: clicking on "new game" triggers this...
     this.input.on('pointerdown', this.onPointerDown, this)
@@ -251,6 +314,9 @@ export default class GameScene extends Phaser.Scene {
   setScore (score: number) {
     this.score = score
     this.registry.set('score', score)
+    if (this.gameSession) {
+      this.gameSession.updateScore(score)
+    }
   }
 
   setMoves (moves: number) {
@@ -260,9 +326,28 @@ export default class GameScene extends Phaser.Scene {
 
   decrementMoves () {
     this.setMoves(this.moves - 1)
-    if (this.moves <= 0) {
-      this.gameOver('Out of moves!')
+    if (this.gameSession) {
+      this.gameSession.incrementMoves()
     }
+    // Don't check for game over here - let it happen after all cascades finish
+  }
+
+  /**
+   * Awards points for gems destroyed by power-up activation
+   * Counts cells marked for destruction, destroys them, and awards points
+   * @returns Number of gems destroyed
+   */
+  async awardPowerUpScore (): Promise<number> {
+    const destroyedCount = this.getCellsToDestroy().length
+    await this.destroyCells()
+
+    if (destroyedCount > 0) {
+      const powerUpScore = destroyedCount * POINTS_PER_GEM
+      this.setScore(this.score + powerUpScore)
+      this.logger.debug(`Destroyed ${destroyedCount} gems, awarded ${powerUpScore} points`)
+    }
+
+    return destroyedCount
   }
 
   async onPointerDown (pointer: Phaser.Input.Pointer) {
@@ -278,10 +363,6 @@ export default class GameScene extends Phaser.Scene {
 
     const pointedCell = this.getCellAt(pointer)
 
-    // Note: Power-ups can no longer be activated by direct click
-    // They MUST be swapped/dragged to activate, giving players strategic control
-    // to position rockets or choose Light Ball target colors
-
     if (this.selectedCell == null) {
       this.selectCell(pointedCell)
       return
@@ -291,7 +372,53 @@ export default class GameScene extends Phaser.Scene {
     const secondCell = pointedCell
     this.deselectCell()
 
+    // Allow clicking power-ups directly to activate them in place
     if (firstCell === secondCell) {
+      if (firstCell.powerup) {
+        console.log(`[POWER-UP] Clicked ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}] - activating in place`)
+        this.moveInProgress = true
+
+        // Activate the power-up without a swap
+        this.triggerPowerUp(firstCell)
+
+        // Count destroyed cells, destroy them, and award points
+        await this.awardPowerUpScore()
+
+        await this.makeCellsFall()
+        await this.refillBoard()
+
+        // Valid move - decrement moves counter
+        this.decrementMoves()
+
+        // Process cascades
+        let cascades = 0
+        while (this.boardShouldExplode()) {
+          const chains = this.getExplodingChains()
+          this.createPowerUpsFromChains(chains)
+          this.showFloatingScores(chains, cascades)
+          await this.destroyCells()
+          this.setScore(this.score + this.computeScore(chains, cascades))
+          await this.makeCellsFall()
+          await this.refillBoard()
+          cascades++
+        }
+
+        // Check for game over conditions AFTER all cascades have finished
+        if (this.moves <= 0) {
+          this.gameOver('Out of moves!')
+        } else {
+          const winningMoves = this.getWinningMoves()
+          console.log(`${winningMoves.length} winning moves`)
+          if (this.debugMode) {
+            console.log('[DEBUG] Skipping "no more moves" check in debug mode')
+          }
+          if (winningMoves.length === 0 && !this.debugMode) {
+            this.gameOver('No more moves!')
+          }
+        }
+
+        this.moveInProgress = false
+      }
       return
     }
 
@@ -322,7 +449,10 @@ export default class GameScene extends Phaser.Scene {
         console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
         this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
       }
-      await this.destroyCells()
+
+      // Count destroyed cells, destroy them, and award points
+      await this.awardPowerUpScore()
+
       await this.makeCellsFall()
       await this.refillBoard()
     }
@@ -369,16 +499,21 @@ export default class GameScene extends Phaser.Scene {
 
         cascades++
       }
-      const winningMoves = this.getWinningMoves()
-      console.log(`${winningMoves.length} winning moves`)
-      if (this.debugMode) {
-        console.log('[DEBUG] Board state after cascades:')
-        this.logBoard()
-        console.log('[DEBUG] Skipping "no more moves" check in debug mode')
-      }
-      // Skip game over check in debug mode to allow continued testing
-      if (winningMoves.length === 0 && !this.debugMode) {
-        this.gameOver('No more moves!')
+      // Check for game over conditions AFTER all cascades have finished
+      if (this.moves <= 0) {
+        this.gameOver('Out of moves!')
+      } else {
+        const winningMoves = this.getWinningMoves()
+        console.log(`${winningMoves.length} winning moves`)
+        if (this.debugMode) {
+          console.log('[DEBUG] Board state after cascades:')
+          this.logBoard()
+          console.log('[DEBUG] Skipping "no more moves" check in debug mode')
+        }
+        // Skip game over check in debug mode to allow continued testing
+        if (winningMoves.length === 0 && !this.debugMode) {
+          this.gameOver('No more moves!')
+        }
       }
     } else {
       // Invalid move - swap back and play error sound
@@ -421,60 +556,315 @@ export default class GameScene extends Phaser.Scene {
   gameOver (message: string = 'Game Over') {
     this.isGameOver = true
 
-    // Update personal best
-    const isNewBest = ScoreStorageService.updatePersonalBest(this.score)
+    // Check if this is a personal best
+    const personalBest = LocalScores.getPersonalBest()
+    const isNewPersonalBest = !personalBest || this.score > personalBest.score
 
     const gameOverBackground = this.add.rectangle(0, 0, this.zone.width, this.zone.height)
       .setOrigin(0)
       .setFillStyle(0x000000, 0.8)
 
-    const gameOverTitle = this.add.text(0, -50, message)
+    const gameOverTitle = this.add.text(0, -180, message)
       .setOrigin(0.5)
       .setFontFamily('Arial')
       .setFontSize(32)
       .setColor('#FF4444')
       .setFontStyle('bold')
 
-    const finalScoreText = this.add.text(0, 10, `Final Score: ${this.score}`)
+    // Personal best indicator
+    let personalBestText: Phaser.GameObjects.Text | null = null
+    if (isNewPersonalBest) {
+      personalBestText = this.add.text(0, -140, 'NEW PERSONAL BEST!')
+        .setOrigin(0.5)
+        .setFontFamily('Arial')
+        .setFontSize(20)
+        .setColor('#FFD700')
+        .setFontStyle('bold')
+    } else if (personalBest) {
+      personalBestText = this.add.text(0, -140, `Personal Best: ${personalBest.score}`)
+        .setOrigin(0.5)
+        .setFontFamily('Arial')
+        .setFontSize(16)
+        .setColor('#CCCCCC')
+    }
+
+    const finalScoreText = this.add.text(0, -100, `Final Score: ${this.score}`)
       .setOrigin(0.5)
       .setFontFamily('Arial')
-      .setFontSize(24)
+      .setFontSize(28)
       .setColor('#FFD700')
       .setFontStyle('bold')
 
-    // Add new best indicator if applicable
-    const newBestText = isNewBest ? this.add.text(0, 40, '🎉 New Personal Best! 🎉')
+    const sessionInfo = this.add.text(
+      0, -65,
+      `Moves: ${this.gameSession.getMoves()} | Time: ${this.gameSession.getDuration()}s`
+    )
       .setOrigin(0.5)
       .setFontFamily('Arial')
-      .setFontSize(18)
-      .setColor('#00FF00')
-      .setFontStyle('bold') : null
+      .setFontSize(16)
+      .setColor('#CCCCCC')
 
-    const restartHint = this.add.text(0, isNewBest ? 70 : 60, 'Click "New Game" to restart')
+    // Name input prompt
+    const namePrompt = this.add.text(0, -20, 'Enter your name for leaderboard:')
       .setOrigin(0.5)
       .setFontFamily('Arial')
       .setFontSize(18)
       .setColor('white')
 
+    // Create an HTML input element for name
+    const nameInput = document.createElement('input')
+    nameInput.type = 'text'
+    nameInput.maxLength = 20
+    nameInput.placeholder = 'Your Name'
+    // Pre-fill with last used name
+    const lastName = LocalScores.getLastPlayerName()
+    if (lastName) {
+      nameInput.value = lastName
+    }
+    nameInput.style.position = 'absolute'
+    nameInput.style.width = '200px'
+    nameInput.style.padding = '8px'
+    nameInput.style.fontSize = '16px'
+    nameInput.style.textAlign = 'center'
+    nameInput.style.left = `${MENU_WIDTH + this.zone.width / 2 - 100}px`
+    nameInput.style.top = `${this.zone.height / 2 + 20}px`
+    nameInput.style.zIndex = '1000'
+    document.body.appendChild(nameInput)
+    nameInput.focus()
+    nameInput.select() // Select text so user can easily replace it
+
+    // Submit button
+    const submitButton = this.add.text(0, 100, 'Submit Score')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(20)
+      .setColor('#4CAF50')
+      .setFontStyle('bold')
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => submitButton.setColor('#66FF66'))
+      .on('pointerout', () => submitButton.setColor('#4CAF50'))
+      .on('pointerup', () => this.submitHighScore(nameInput.value, nameInput))
+
+    // Skip button
+    const skipButton = this.add.text(0, 140, 'Skip')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(16)
+      .setColor('#888888')
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => skipButton.setColor('#AAAAAA'))
+      .on('pointerout', () => skipButton.setColor('#888888'))
+      .on('pointerup', () => {
+        nameInput.remove()
+        this.showRestartHint()
+      })
+
+    const restartHint = this.add.text(0, 180, 'Click "New Game" to restart')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(14)
+      .setColor('#666666')
+
     this.gameOverScreen = this.add.container(0, 0)
       .add(gameOverBackground)
       .add(gameOverTitle)
       .add(finalScoreText)
+      .add(sessionInfo)
+      .add(namePrompt)
+      .add(submitButton)
+      .add(skipButton)
+      .add(restartHint)
       .setDepth(1)
-    
-    if (newBestText) {
-      this.gameOverScreen.add(newBestText)
-      Phaser.Display.Align.In.Center(newBestText, gameOverBackground, 0, 40)
+
+    if (personalBestText) {
+      this.gameOverScreen.add(personalBestText)
+      Phaser.Display.Align.In.Center(personalBestText, gameOverBackground, 0, -140)
     }
-    
-    this.gameOverScreen.add(restartHint)
 
-    Phaser.Display.Align.In.Center(gameOverTitle, gameOverBackground, 0, -50)
-    Phaser.Display.Align.In.Center(finalScoreText, gameOverBackground, 0, 10)
-    Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, isNewBest ? 70 : 60)
+    Phaser.Display.Align.In.Center(gameOverTitle, gameOverBackground, 0, -180)
+    Phaser.Display.Align.In.Center(finalScoreText, gameOverBackground, 0, -100)
+    Phaser.Display.Align.In.Center(sessionInfo, gameOverBackground, 0, -65)
+    Phaser.Display.Align.In.Center(namePrompt, gameOverBackground, 0, -20)
+    Phaser.Display.Align.In.Center(submitButton, gameOverBackground, 0, 100)
+    Phaser.Display.Align.In.Center(skipButton, gameOverBackground, 0, 140)
+    Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, 180)
 
-    // Notify MenuScene to update personal best display
-    this.registry.events.emit('PERSONAL_BEST_UPDATED')
+    // Allow submitting with Enter key
+    nameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.submitHighScore(nameInput.value, nameInput)
+      }
+    })
+  }
+
+  async submitHighScore(playerName: string, inputElement: HTMLInputElement) {
+    if (!playerName || playerName.trim().length === 0) {
+      alert('Please enter your name')
+      return
+    }
+
+    // Update UI to show submitting state
+    const submitButton = this.gameOverScreen.list.find(item =>
+      item instanceof Phaser.GameObjects.Text && item.text === 'Submit Score'
+    ) as Phaser.GameObjects.Text
+
+    if (submitButton) {
+      submitButton.setText('Submitting...')
+      submitButton.disableInteractive()
+    }
+
+    try {
+      const submission = this.gameSession.getSubmissionData(playerName.trim())
+
+      // Save to local storage
+      const wasPersonalBest = LocalScores.saveIfPersonalBest(
+        submission.score,
+        submission.moves,
+        submission.duration,
+        submission.playerName
+      )
+
+      // Log submission details for debugging
+      console.log('[SCORE SUBMISSION] Sending to API:', {
+        playerName: submission.playerName,
+        score: submission.score,
+        moves: submission.moves,
+        duration: submission.duration,
+        sessionHash: submission.sessionHash,
+        sessionHashLength: submission.sessionHash.length,
+        gameVersion: submission.gameVersion
+      })
+
+      const response = await this.highScoreAPI.submitScore(submission)
+
+      // Log full response for debugging
+      console.log('[SCORE SUBMISSION] API Response:', response)
+
+      inputElement.remove()
+
+      if (response.success) {
+        console.log('[SCORE SUBMISSION] Success!')
+        this.showSubmissionSuccess(response.rank, wasPersonalBest)
+      } else {
+        console.error('[SCORE SUBMISSION] Failed:', response.error)
+        this.showSubmissionError(response.error || 'Failed to submit score')
+      }
+    } catch (error: any) {
+      console.error('[SCORE SUBMISSION] Exception:', error)
+      console.error('[SCORE SUBMISSION] Error stack:', error.stack)
+      inputElement.remove()
+      this.showSubmissionError('Network error. Please check your connection.')
+    }
+  }
+
+  showSubmissionSuccess(rank: number | null | undefined, wasPersonalBest: boolean = false) {
+    // Clear game over screen
+    this.gameOverScreen.destroy()
+
+    const background = this.add.rectangle(0, 0, this.zone.width, this.zone.height)
+      .setOrigin(0)
+      .setFillStyle(0x000000, 0.8)
+
+    const successTitle = this.add.text(0, -70, 'Score Submitted!')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(32)
+      .setColor('#4CAF50')
+      .setFontStyle('bold')
+
+    let personalBestNote: Phaser.GameObjects.Text | null = null
+    if (wasPersonalBest) {
+      personalBestNote = this.add.text(0, -30, 'New Personal Best!')
+        .setOrigin(0.5)
+        .setFontFamily('Arial')
+        .setFontSize(18)
+        .setColor('#FFD700')
+    }
+
+    const rankText = rank
+      ? this.add.text(0, 20, `Your Rank: #${rank}`)
+          .setOrigin(0.5)
+          .setFontFamily('Arial')
+          .setFontSize(24)
+          .setColor('#FFD700')
+      : this.add.text(0, 20, 'Thank you for playing!')
+          .setOrigin(0.5)
+          .setFontFamily('Arial')
+          .setFontSize(20)
+          .setColor('#FFFFFF')
+
+    this.gameOverScreen = this.add.container(0, 0)
+      .add(background)
+      .add(successTitle)
+      .add(rankText)
+      .setDepth(1)
+
+    if (personalBestNote) {
+      this.gameOverScreen.add(personalBestNote)
+      Phaser.Display.Align.In.Center(personalBestNote, background, 0, -30)
+    }
+
+    Phaser.Display.Align.In.Center(successTitle, background, 0, -70)
+    Phaser.Display.Align.In.Center(rankText, background, 0, 20)
+
+    this.time.delayedCall(2000, () => this.showRestartHint())
+  }
+
+  showSubmissionError(error: string) {
+    // Clear game over screen
+    this.gameOverScreen.destroy()
+
+    const background = this.add.rectangle(0, 0, this.zone.width, this.zone.height)
+      .setOrigin(0)
+      .setFillStyle(0x000000, 0.8)
+
+    const errorTitle = this.add.text(0, -50, 'Submission Failed')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(28)
+      .setColor('#FF4444')
+      .setFontStyle('bold')
+
+    const errorMessage = this.add.text(0, 10, error)
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(16)
+      .setColor('#FFFFFF')
+      .setWordWrapWidth(this.zone.width - 40)
+
+    this.gameOverScreen = this.add.container(0, 0)
+      .add(background)
+      .add(errorTitle)
+      .add(errorMessage)
+      .setDepth(1)
+
+    Phaser.Display.Align.In.Center(errorTitle, background, 0, -50)
+    Phaser.Display.Align.In.Center(errorMessage, background, 0, 10)
+
+    this.time.delayedCall(2000, () => this.showRestartHint())
+  }
+
+  showRestartHint() {
+    if (this.gameOverScreen) {
+      this.gameOverScreen.destroy()
+    }
+
+    const background = this.add.rectangle(0, 0, this.zone.width, this.zone.height)
+      .setOrigin(0)
+      .setFillStyle(0x000000, 0.8)
+
+    const restartHint = this.add.text(0, 0, 'Click "New Game" to restart')
+      .setOrigin(0.5)
+      .setFontFamily('Arial')
+      .setFontSize(20)
+      .setColor('white')
+
+    this.gameOverScreen = this.add.container(0, 0)
+      .add(background)
+      .add(restartHint)
+      .setDepth(1)
+
+    Phaser.Display.Align.In.Center(restartHint, background)
   }
 
   computeScore (chains: Cell[][], cascades: number): number {
@@ -598,7 +988,7 @@ export default class GameScene extends Phaser.Scene {
             // Check if any of the swap positions falls within the square bounds
             const squareRowRange = [row, row + 1]
             const squareColRange = [col, col + 1]
-            const isSwapInSquare = 
+            const isSwapInSquare =
               (squareRowRange.includes(swapContext.from.row) && squareColRange.includes(swapContext.from.column)) ||
               (squareRowRange.includes(swapContext.to.row) && squareColRange.includes(swapContext.to.column))
 
@@ -760,7 +1150,7 @@ export default class GameScene extends Phaser.Scene {
         // Determine power-up type based on chain length and orientation
         let powerUpType: PowerUpType
         if (chain.length >= 5) {
-          powerUpType = 'light-ball'  // 5+ match → color bomb
+          powerUpType = 'color-bomb'  // 5+ match → color bomb
         } else if (isHorizontal) {
           powerUpType = 'horizontal-rocket'  // 4 horizontal → horizontal rocket
         } else {
@@ -811,7 +1201,7 @@ export default class GameScene extends Phaser.Scene {
   createPowerUpBurst (x: number, y: number, powerUpType: PowerUpType) {
     // Color based on power-up type
     let color = 0xffff00 // default yellow
-    if (powerUpType === 'light-ball') {
+    if (powerUpType === 'color-bomb') {
       color = 0xffffff // white/rainbow
     } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
       color = 0xff9900 // orange
@@ -866,19 +1256,21 @@ export default class GameScene extends Phaser.Scene {
     return neighbors
   }
 
-  triggerPowerUp (cell: Cell, swappedWith?: Cell, targetedCells?: Set<Cell>) {
+  triggerPowerUp (cell: Cell, swappedWith?: Cell) {
     if (!cell.powerup) return
-
-    // Initialize targetedCells Set if this is the first call in the chain
-    if (!targetedCells) {
-      targetedCells = new Set<Cell>()
-    }
 
     const powerUpType = cell.powerup
 
+    // Check for power-up combinations
+    if (swappedWith && swappedWith.powerup) {
+      console.log(`[COMBO] Detected combination: ${powerUpType} + ${swappedWith.powerup}`)
+      this.executeCombination(cell, swappedWith)
+      return
+    }
+
     // Play sound based on power-up type
-    if (powerUpType === 'light-ball') {
-      this.sound.play('light-ball-sound', { volume: 0.4 })
+    if (powerUpType === 'color-bomb') {
+      this.sound.play('color-bomb-sound', { volume: 0.4 })
     } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
       this.sound.play('rocket', { volume: 0.4 })
     } else if (powerUpType === 'tnt') {
@@ -906,7 +1298,7 @@ export default class GameScene extends Phaser.Scene {
           // Chain-activate any power-ups in the row
           if (targetCell.powerup && targetCell !== cell) {
             console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-            this.triggerPowerUp(targetCell, undefined, targetedCells)
+            this.triggerPowerUp(targetCell)
           } else {
             targetCell.empty = true
           }
@@ -920,23 +1312,23 @@ export default class GameScene extends Phaser.Scene {
           // Chain-activate any power-ups in the column
           if (targetCell.powerup && targetCell !== cell) {
             console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-            this.triggerPowerUp(targetCell, undefined, targetedCells)
+            this.triggerPowerUp(targetCell)
           } else {
             targetCell.empty = true
           }
         }
         break
 
-      case 'light-ball':
+      case 'color-bomb':
         // Destroy all gems of the same color
         // If swapped with a gem, use that gem's color; otherwise pick adjacent color
         let targetColor: string | null = null
         if (swappedWith && !swappedWith.empty && !swappedWith.powerup && swappedWith.color) {
           targetColor = swappedWith.color
-          console.log(`Light ball swapped with ${targetColor}, destroying all ${targetColor} gems`)
+          console.log(`Color bomb swapped with ${targetColor}, destroying all ${targetColor} gems`)
         } else {
           targetColor = this.getAdjacentGemColor(cell)
-          console.log(`Light ball clicked, picking adjacent color: ${targetColor}`)
+          console.log(`Color bomb clicked, picking adjacent color: ${targetColor}`)
         }
 
         if (targetColor) {
@@ -947,7 +1339,7 @@ export default class GameScene extends Phaser.Scene {
                 // Chain-activate any power-ups of matching color
                 if (targetCell.powerup) {
                   console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-                  this.triggerPowerUp(targetCell, undefined, targetedCells)
+                  this.triggerPowerUp(targetCell)
                 } else {
                   targetCell.empty = true
                 }
@@ -958,39 +1350,42 @@ export default class GameScene extends Phaser.Scene {
         break
 
       case 'tnt':
-        // Destroy in a cross pattern (4 directions, 2 cells each)
+        // Destroy all 8 surrounding cells (3x3 area including corners)
         const directions = [
-          { dr: -1, dc: 0 },  // up
-          { dr: 1, dc: 0 },   // down
-          { dr: 0, dc: -1 },  // left
-          { dr: 0, dc: 1 }    // right
+          { dr: -1, dc: 0 },   // up
+          { dr: 1, dc: 0 },    // down
+          { dr: 0, dc: -1 },   // left
+          { dr: 0, dc: 1 },    // right
+          { dr: -1, dc: -1 },  // top-left (corner)
+          { dr: -1, dc: 1 },   // top-right (corner)
+          { dr: 1, dc: -1 },   // bottom-left (corner)
+          { dr: 1, dc: 1 }     // bottom-right (corner)
         ]
         for (const dir of directions) {
-          // Extend blast radius to 2 cells in each direction
-          for (let distance = 1; distance <= 2; distance++) {
-            const targetRow = cell.row + (dir.dr * distance)
-            const targetCol = cell.column + (dir.dc * distance)
-            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
-              const targetCell = this.board[targetRow][targetCol]
-              if (targetCell.powerup) {
-                console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-                this.triggerPowerUp(targetCell, undefined, targetedCells)
-              } else {
-                targetCell.empty = true
-              }
+          const targetRow = cell.row + dir.dr
+          const targetCol = cell.column + dir.dc
+          if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+            const targetCell = this.board[targetRow][targetCol]
+            if (targetCell.powerup) {
+              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+              this.triggerPowerUp(targetCell)
+            } else {
+              targetCell.empty = true
             }
           }
         }
         break
 
       case 'fly-away':
+        console.log(`[FLY-AWAY] Activated at [${cell.row}, ${cell.column}]`)
         // Find best target to fly to, explode at start, fly, explode at end
-        const bestTarget = this.findBestFlyAwayTarget(cell, targetedCells)
+        const bestTarget = this.findBestFlyAwayTarget(cell)
+
         if (bestTarget) {
-          // Mark this target as taken so other fly-aways won't target it
-          targetedCells.add(bestTarget)
-          
+          console.log(`[FLY-AWAY] Found target: [${bestTarget.row}, ${bestTarget.column}] (${bestTarget.color})`)
+
           // First explosion at current position (cross pattern)
+          console.log(`[FLY-AWAY] Starting first explosion at [${cell.row}, ${cell.column}]`)
           for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
             const targetRow = cell.row + dir.dr
             const targetCol = cell.column + dir.dc
@@ -998,9 +1393,10 @@ export default class GameScene extends Phaser.Scene {
               const targetCell = this.board[targetRow][targetCol]
               // Chain-activate any power-ups hit by the starting explosion
               if (targetCell.powerup) {
-                console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}] from fly-away start`)
-                this.triggerPowerUp(targetCell, undefined, targetedCells)
+                console.log(`[FLY-AWAY] Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}] from start explosion`)
+                this.triggerPowerUp(targetCell)
               } else {
+                console.log(`[FLY-AWAY] Marking [${targetRow}, ${targetCol}] as empty from start explosion`)
                 targetCell.empty = true
               }
             }
@@ -1008,24 +1404,25 @@ export default class GameScene extends Phaser.Scene {
 
           // Animate fly-away sprite flying to target
           // The target explosion will happen inside the animation's onComplete callback
+          console.log(`[FLY-AWAY] Beginning flight animation to [${bestTarget.row}, ${bestTarget.column}]`)
           this.animateFlyAway(cell, bestTarget)
+        } else {
+          console.log(`[FLY-AWAY] WARNING: No target found! Fly-away will disappear without effect.`)
         }
         break
     }
   }
 
-  findBestFlyAwayTarget (fromCell: Cell, targetedCells?: Set<Cell>): Cell | null {
+  findBestFlyAwayTarget (fromCell: Cell, excludeCells: Cell[] = []): Cell | null {
+    console.log(`[FLY-AWAY] Searching for best target...`)
     // Find the cell with the most matches (best strategic value)
-    // Exclude cells that are already targeted by other fly-aways
     let bestCell: Cell | null = null
     let bestScore = 0
 
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const cell = this.board[row][col]
-        // Skip if cell is empty, a power-up, the source cell, or already targeted
-        if (cell.empty || cell.powerup || cell === fromCell) continue
-        if (targetedCells && targetedCells.has(cell)) continue
+        if (cell.empty || cell.powerup || cell === fromCell || excludeCells.includes(cell)) continue
 
         // Count how many neighbors match this cell's color
         const neighbors = this.getNeighbors(cell)
@@ -1034,14 +1431,22 @@ export default class GameScene extends Phaser.Scene {
         if (matchCount > bestScore) {
           bestScore = matchCount
           bestCell = cell
+          console.log(`[FLY-AWAY] New best target: [${row}, ${col}] (${cell.color}) with ${matchCount} matching neighbors`)
         }
       }
     }
 
+    console.log(`[FLY-AWAY] Best target search complete. Score: ${bestScore}, Target: ${bestCell ? `[${bestCell.row}, ${bestCell.column}]` : 'null'}`)
     return bestCell
   }
 
+  getRandomGemColor (): string {
+    const colors = ['blue', 'green', 'orange', 'red', 'white', 'yellow']
+    return Phaser.Math.RND.pick(colors)
+  }
+
   animateFlyAway (fromCell: Cell, toCell: Cell) {
+    console.log(`[FLY-AWAY] Animation starting: from [${fromCell.row}, ${fromCell.column}] to [${toCell.row}, ${toCell.column}]`)
     const startX = fromCell.column * CELL_SIZE + CELL_SIZE / 2
     const startY = fromCell.row * CELL_SIZE + CELL_SIZE / 2
     const endX = toCell.column * CELL_SIZE + CELL_SIZE / 2
@@ -1051,6 +1456,8 @@ export default class GameScene extends Phaser.Scene {
     const flyingSprite = this.add.sprite(startX, startY, 'fly-away')
       .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
       .setDepth(2000)
+
+    console.log(`[FLY-AWAY] Created flying sprite`)
 
     // Calculate orbit radius for spinning around target
     const orbitRadius = CELL_SIZE * 0.7
@@ -1064,6 +1471,7 @@ export default class GameScene extends Phaser.Scene {
       duration: 1200,
       ease: 'Cubic.easeInOut',
       onComplete: () => {
+        console.log(`[FLY-AWAY] Reached target, beginning orbit`)
         // Step 2: Orbit around target once
         let orbitAngle = 0
         this.tweens.add({
@@ -1079,36 +1487,49 @@ export default class GameScene extends Phaser.Scene {
             flyingSprite.angle = 360 + (progress * 360)
           },
           onComplete: () => {
+            console.log(`[FLY-AWAY] Orbit complete, starting second explosion at [${toCell.row}, ${toCell.column}]`)
             // Create explosion effect at target
             this.createPowerUpEffect(endX, endY, 'fly-away', toCell)
 
+            console.log(`[FLY-AWAY] Destroying target cell and surrounding cells`)
             // NOW destroy the target and surrounding cells (cross pattern)
+            let destroyedCount = 0
             for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
               const targetRow = toCell.row + dir.dr
               const targetCol = toCell.column + dir.dc
               if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
                 const targetCell = this.board[targetRow][targetCol]
                 if (targetCell.powerup) {
-                  console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+                  console.log(`[FLY-AWAY] Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}] from target explosion`)
                   this.triggerPowerUp(targetCell)
+                  destroyedCount++
                 } else if (!targetCell.empty) {
                   // Mark empty and visually destroy the cell
+                  console.log(`[FLY-AWAY] Destroying cell at [${targetRow}, ${targetCol}] (${targetCell.color})`)
                   targetCell.empty = true
                   this.destroyCell(targetCell)
+                  destroyedCount++
                 }
               }
             }
             // Mark target itself for destruction and visually destroy it
             if (!toCell.empty) {
+              console.log(`[FLY-AWAY] Destroying target cell at [${toCell.row}, ${toCell.column}] (${toCell.color})`)
               toCell.empty = true
               this.destroyCell(toCell)
+              destroyedCount++
+            } else {
+              console.log(`[FLY-AWAY] WARNING: Target cell at [${toCell.row}, ${toCell.column}] is already empty!`)
             }
+
+            console.log(`[FLY-AWAY] Second explosion complete. Destroyed ${destroyedCount} cells.`)
 
             // Destroy the flying sprite
             flyingSprite.destroy()
 
             // Wait for destruction animations to complete, then trigger cascade
             this.time.delayedCall(destroyDuration, async () => {
+              console.log(`[FLY-AWAY] Starting cascade logic after second explosion`)
               // Now trigger the fall/refill/cascade logic
               await this.makeCellsFall()
               await this.refillBoard()
@@ -1122,11 +1543,391 @@ export default class GameScene extends Phaser.Scene {
                 await this.makeCellsFall()
                 await this.refillBoard()
               }
+              console.log(`[FLY-AWAY] Cascade complete, fly-away sequence finished`)
             })
           }
         })
       }
     })
+  }
+
+  executeCombination (cell1: Cell, cell2: Cell) {
+    const type1 = cell1.powerup
+    const type2 = cell2.powerup
+
+    // Use cell2's position as the combination origin
+    const position = cell2
+
+    // Mark both power-ups for destruction
+    cell1.powerup = null
+    cell1.empty = true
+    cell2.powerup = null
+    cell2.empty = true
+
+    console.log(`[COMBO] Executing ${type1} + ${type2} at [${position.row}, ${position.column}]`)
+
+    // Play special combo sound
+    this.sound.play('color-bomb-sound', { volume: 0.6 })
+
+    // Sort the combination to handle order-independent matching
+    const combo = [type1, type2].sort().join('+')
+
+    switch (combo) {
+      // Rocket + Rocket Combinations
+      case 'horizontal-rocket+vertical-rocket':
+        console.log('[COMBO] Giant Cross - destroying entire row AND column')
+        // Destroy entire row
+        for (let col = 0; col < size; col++) {
+          const targetCell = this.board[position.row][col]
+          if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+            this.triggerPowerUp(targetCell)
+          } else {
+            targetCell.empty = true
+          }
+        }
+        // Destroy entire column
+        for (let row = 0; row < size; row++) {
+          const targetCell = this.board[row][position.column]
+          if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+            this.triggerPowerUp(targetCell)
+          } else {
+            targetCell.empty = true
+          }
+        }
+        break
+
+      case 'horizontal-rocket+horizontal-rocket':
+        console.log('[COMBO] Triple Horizontal Blast - destroying 3 rows')
+        // Destroy 3 rows (current, above, below)
+        for (let rowOffset = -1; rowOffset <= 1; rowOffset++) {
+          const targetRow = position.row + rowOffset
+          if (targetRow >= 0 && targetRow < size) {
+            for (let col = 0; col < size; col++) {
+              const targetCell = this.board[targetRow][col]
+              if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+                this.triggerPowerUp(targetCell)
+              } else {
+                targetCell.empty = true
+              }
+            }
+          }
+        }
+        break
+
+      case 'vertical-rocket+vertical-rocket':
+        console.log('[COMBO] Triple Vertical Blast - destroying 3 columns')
+        // Destroy 3 columns (current, left, right)
+        for (let colOffset = -1; colOffset <= 1; colOffset++) {
+          const targetCol = position.column + colOffset
+          if (targetCol >= 0 && targetCol < size) {
+            for (let row = 0; row < size; row++) {
+              const targetCell = this.board[row][targetCol]
+              if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+                this.triggerPowerUp(targetCell)
+              } else {
+                targetCell.empty = true
+              }
+            }
+          }
+        }
+        break
+
+      // TNT Combinations
+      case 'tnt+tnt':
+        console.log('[COMBO] Mega Explosion - 5x5 blast')
+        // Destroy 5x5 area centered on position
+        for (let rowOffset = -2; rowOffset <= 2; rowOffset++) {
+          for (let colOffset = -2; colOffset <= 2; colOffset++) {
+            const targetRow = position.row + rowOffset
+            const targetCol = position.column + colOffset
+            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+              const targetCell = this.board[targetRow][targetCol]
+              if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+                this.triggerPowerUp(targetCell)
+              } else {
+                targetCell.empty = true
+              }
+            }
+          }
+        }
+        break
+
+      case 'horizontal-rocket+tnt':
+        console.log('[COMBO] Super Row Explosion - row + cross patterns')
+        // Destroy entire row with TNT explosion at each cell
+        for (let col = 0; col < size; col++) {
+          const rowCell = this.board[position.row][col]
+          if (rowCell.powerup && rowCell !== cell1 && rowCell !== cell2) {
+            this.triggerPowerUp(rowCell)
+          } else {
+            rowCell.empty = true
+          }
+
+          // Add cross pattern at this position
+          const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]
+          for (const dir of dirs) {
+            for (let dist = 1; dist <= 2; dist++) {
+              const targetRow = position.row + (dir.dr * dist)
+              const targetCol = col + (dir.dc * dist)
+              if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+                const targetCell = this.board[targetRow][targetCol]
+                if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+                  this.triggerPowerUp(targetCell)
+                } else {
+                  targetCell.empty = true
+                }
+              }
+            }
+          }
+        }
+        break
+
+      case 'tnt+vertical-rocket':
+        console.log('[COMBO] Super Column Explosion - column + cross patterns')
+        // Destroy entire column with TNT explosion at each cell
+        for (let row = 0; row < size; row++) {
+          const colCell = this.board[row][position.column]
+          if (colCell.powerup && colCell !== cell1 && colCell !== cell2) {
+            this.triggerPowerUp(colCell)
+          } else {
+            colCell.empty = true
+          }
+
+          // Add cross pattern at this position
+          const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]
+          for (const dir of dirs) {
+            for (let dist = 1; dist <= 2; dist++) {
+              const targetRow = row + (dir.dr * dist)
+              const targetCol = position.column + (dir.dc * dist)
+              if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+                const targetCell = this.board[targetRow][targetCol]
+                if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+                  this.triggerPowerUp(targetCell)
+                } else {
+                  targetCell.empty = true
+                }
+              }
+            }
+          }
+        }
+        break
+
+      // Color Bomb Combinations
+      case 'color-bomb+color-bomb':
+        console.log('[COMBO] Complete Board Clear!')
+        // Destroy everything
+        for (let row = 0; row < size; row++) {
+          for (let col = 0; col < size; col++) {
+            const targetCell = this.board[row][col]
+            if (targetCell !== cell1 && targetCell !== cell2) {
+              targetCell.empty = true
+            }
+          }
+        }
+        break
+
+      case 'color-bomb+horizontal-rocket':
+        console.log('[COMBO] Color Rocket Storm (Horizontal) - transforming all gems of target color into horizontal rockets')
+        // Pick a color from adjacent cells
+        const hRocketColor = this.getAdjacentGemColor(position) || this.getRandomGemColor()
+        console.log(`[COMBO] Target color: ${hRocketColor}`)
+        // Transform all gems of that color into horizontal rockets and fire them
+        for (let row = 0; row < size; row++) {
+          for (let col = 0; col < size; col++) {
+            const targetCell = this.board[row][col]
+            if (targetCell.color === hRocketColor && !targetCell.empty && !targetCell.powerup) {
+              // Destroy entire row for each gem of this color
+              for (let c = 0; c < size; c++) {
+                const rowCell = this.board[row][c]
+                if (rowCell.powerup && rowCell !== cell1 && rowCell !== cell2) {
+                  this.triggerPowerUp(rowCell)
+                } else {
+                  rowCell.empty = true
+                }
+              }
+            }
+          }
+        }
+        break
+
+      case 'color-bomb+vertical-rocket':
+        console.log('[COMBO] Color Rocket Storm (Vertical) - transforming all gems of target color into vertical rockets')
+        // Pick a color from adjacent cells
+        const vRocketColor = this.getAdjacentGemColor(position) || this.getRandomGemColor()
+        console.log(`[COMBO] Target color: ${vRocketColor}`)
+        // Transform all gems of that color into vertical rockets and fire them
+        for (let row = 0; row < size; row++) {
+          for (let col = 0; col < size; col++) {
+            const targetCell = this.board[row][col]
+            if (targetCell.color === vRocketColor && !targetCell.empty && !targetCell.powerup) {
+              // Destroy entire column for each gem of this color
+              for (let r = 0; r < size; r++) {
+                const colCell = this.board[r][col]
+                if (colCell.powerup && colCell !== cell1 && colCell !== cell2) {
+                  this.triggerPowerUp(colCell)
+                } else {
+                  colCell.empty = true
+                }
+              }
+            }
+          }
+        }
+        break
+
+      case 'color-bomb+tnt':
+        console.log('[COMBO] Color Bomb Chain - transforming all gems of target color into TNTs')
+        // Pick a color from adjacent cells
+        const tntColor = this.getAdjacentGemColor(position) || this.getRandomGemColor()
+        console.log(`[COMBO] Target color: ${tntColor}`)
+        // Find all gems of that color and explode them with TNT effect
+        for (let row = 0; row < size; row++) {
+          for (let col = 0; col < size; col++) {
+            const targetCell = this.board[row][col]
+            if (targetCell.color === tntColor && !targetCell.empty && !targetCell.powerup) {
+              // Create TNT explosion at each location
+              targetCell.empty = true
+              const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]
+              for (const dir of dirs) {
+                for (let dist = 1; dist <= 2; dist++) {
+                  const targetRow = row + (dir.dr * dist)
+                  const targetCol = col + (dir.dc * dist)
+                  if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+                    const explosionCell = this.board[targetRow][targetCol]
+                    if (explosionCell.powerup && explosionCell !== cell1 && explosionCell !== cell2) {
+                      this.triggerPowerUp(explosionCell)
+                    } else {
+                      explosionCell.empty = true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        break
+
+      case 'color-bomb+fly-away':
+        console.log('[COMBO] Color Missile Barrage - launching fly-aways at all gems of target color')
+        // Pick a color from adjacent cells
+        const flyawayColor = this.getAdjacentGemColor(position) || this.getRandomGemColor()
+        console.log(`[COMBO] Target color: ${flyawayColor}`)
+        // Destroy all gems of that color with cross pattern explosions
+        for (let row = 0; row < size; row++) {
+          for (let col = 0; col < size; col++) {
+            const targetCell = this.board[row][col]
+            if (targetCell.color === flyawayColor && !targetCell.empty && !targetCell.powerup) {
+              // Create cross explosion at each location
+              targetCell.empty = true
+              const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]
+              for (const dir of dirs) {
+                const targetRow = row + dir.dr
+                const targetCol = col + dir.dc
+                if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+                  const explosionCell = this.board[targetRow][targetCol]
+                  if (explosionCell.powerup && explosionCell !== cell1 && explosionCell !== cell2) {
+                    this.triggerPowerUp(explosionCell)
+                  } else {
+                    explosionCell.empty = true
+                  }
+                }
+              }
+            }
+          }
+        }
+        break
+
+      // Fly-Away Combinations
+      case 'fly-away+fly-away':
+        console.log('[COMBO] Triple Missile Launch - launching 3 fly-aways to different targets')
+        // Find 3 best targets and explode them with cross patterns
+        const targets: Cell[] = []
+        for (let i = 0; i < 3; i++) {
+          const target = this.findBestFlyAwayTarget(position, targets)
+          if (target) {
+            targets.push(target)
+            // Explode at target with cross pattern
+            target.empty = true
+            const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]
+            for (const dir of dirs) {
+              const targetRow = target.row + dir.dr
+              const targetCol = target.column + dir.dc
+              if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+                const explosionCell = this.board[targetRow][targetCol]
+                if (explosionCell.powerup && explosionCell !== cell1 && explosionCell !== cell2) {
+                  this.triggerPowerUp(explosionCell)
+                } else {
+                  explosionCell.empty = true
+                }
+              }
+            }
+          }
+        }
+        console.log(`[COMBO] Destroyed ${targets.length} targets`)
+        break
+
+      case 'fly-away+horizontal-rocket':
+        console.log('[COMBO] Rocket-Guided Missile (Horizontal) - fly-away finds target and destroys entire row')
+        const hTarget = this.findBestFlyAwayTarget(position)
+        const hTargetRow = hTarget ? hTarget.row : position.row
+        console.log(`[COMBO] Target: ${hTarget ? `[${hTarget.row}, ${hTarget.column}]` : 'none found, using combo position'} - destroying entire row ${hTargetRow}`)
+        // Destroy entire row at target (or at combo position if no target found)
+        for (let col = 0; col < size; col++) {
+          const targetCell = this.board[hTargetRow][col]
+          if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+            this.triggerPowerUp(targetCell)
+          } else {
+            targetCell.empty = true
+          }
+        }
+        break
+
+      case 'fly-away+vertical-rocket':
+        console.log('[COMBO] Rocket-Guided Missile (Vertical) - fly-away finds target and destroys entire column')
+        const vTarget = this.findBestFlyAwayTarget(position)
+        const vTargetCol = vTarget ? vTarget.column : position.column
+        console.log(`[COMBO] Target: ${vTarget ? `[${vTarget.row}, ${vTarget.column}]` : 'none found, using combo position'} - destroying entire column ${vTargetCol}`)
+        // Destroy entire column at target (or at combo position if no target found)
+        for (let row = 0; row < size; row++) {
+          const targetCell = this.board[row][vTargetCol]
+          if (targetCell.powerup && targetCell !== cell1 && targetCell !== cell2) {
+            this.triggerPowerUp(targetCell)
+          } else {
+            targetCell.empty = true
+          }
+        }
+        break
+
+      case 'fly-away+tnt':
+        console.log('[COMBO] Missile + Mega Blast - fly-away finds target and creates enlarged explosion')
+        const tntTarget = this.findBestFlyAwayTarget(position)
+        const tntTargetPos = tntTarget ? tntTarget : position
+        console.log(`[COMBO] Target: ${tntTarget ? `[${tntTarget.row}, ${tntTarget.column}]` : 'none found, using combo position'} - creating 4-cell radius cross explosion`)
+        // Destroy with enlarged cross pattern (4 cells in each direction)
+        tntTargetPos.empty = true
+        const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]
+        for (const dir of dirs) {
+          for (let dist = 1; dist <= 4; dist++) {
+            const targetRow = tntTargetPos.row + (dir.dr * dist)
+            const targetCol = tntTargetPos.column + (dir.dc * dist)
+            if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
+              const explosionCell = this.board[targetRow][targetCol]
+              if (explosionCell.powerup && explosionCell !== cell1 && explosionCell !== cell2) {
+                this.triggerPowerUp(explosionCell)
+              } else {
+                explosionCell.empty = true
+              }
+            }
+          }
+        }
+        break
+
+      default:
+        console.log(`[COMBO] Combination ${combo} not yet implemented - executing both power-ups separately`)
+        // Fallback: trigger both power-ups at their positions
+        this.triggerPowerUp(cell1)
+        this.triggerPowerUp(cell2)
+        break
+    }
   }
 
   createPowerUpEffect (x: number, y: number, powerUpType: PowerUpType, cell: Cell) {
@@ -1160,7 +1961,7 @@ export default class GameScene extends Phaser.Scene {
         })
         this.time.delayedCall(400, () => particles.destroy())
       }
-    } else if (powerUpType === 'light-ball') {
+    } else if (powerUpType === 'color-bomb') {
       // Create massive rainbow explosion
       const particles = this.add.particles(x, y, 'particle', {
         speed: { min: 150, max: 400 },
@@ -1481,8 +2282,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   shouldExplode (cell: Cell): boolean {
-    // Power-ups don't explode as part of normal matches - they must be activated
-    if (cell.powerup) {
+    // Empty cells and power-ups don't explode as part of normal matches
+    if (cell.empty || cell.powerup) {
       return false
     }
     return this.shouldExplodeHorizontally(cell) || this.shouldExplodeVertically(cell)
@@ -1664,13 +2465,60 @@ export default class GameScene extends Phaser.Scene {
       const targetCell = this.board[targetRow][targetCol]
       console.log(`Target cell: ${targetCell.color} at [${targetCell.row}, ${targetCell.column}]`)
 
-      // If it's the same cell, just snap back
+      // If it's the same cell, check for power-up activation
       if (targetCell === draggedCell) {
-        console.log('Same cell - snapping back')
-        gameObject.x = this.dragStartX
-        gameObject.y = this.dragStartY
-        this.draggedCell = null
-        this.updateDebugDisplay()
+        if (draggedCell.powerup) {
+          console.log(`[POWER-UP] Dragged ${draggedCell.powerup} to same position - activating in place`)
+          this.draggedCell = null
+          this.moveInProgress = true
+
+          // Activate the power-up without a swap
+          this.triggerPowerUp(draggedCell)
+
+          // Count destroyed cells, destroy them, and award points
+          await this.awardPowerUpScore()
+
+          await this.makeCellsFall()
+          await this.refillBoard()
+
+          // Valid move - decrement moves counter
+          this.decrementMoves()
+
+          // Process cascades
+          let cascades = 0
+          while (this.boardShouldExplode()) {
+            const chains = this.getExplodingChains()
+            this.createPowerUpsFromChains(chains)
+            this.showFloatingScores(chains, cascades)
+            await this.destroyCells()
+            this.setScore(this.score + this.computeScore(chains, cascades))
+            await this.makeCellsFall()
+            await this.refillBoard()
+            cascades++
+          }
+
+          // Check for game over conditions AFTER all cascades have finished
+          if (this.moves <= 0) {
+            this.gameOver('Out of moves!')
+          } else {
+            const winningMoves = this.getWinningMoves()
+            console.log(`${winningMoves.length} winning moves`)
+            if (this.debugMode) {
+              console.log('[DEBUG] Skipping "no more moves" check in debug mode')
+            }
+            if (winningMoves.length === 0 && !this.debugMode) {
+              this.gameOver('No more moves!')
+            }
+          }
+
+          this.moveInProgress = false
+        } else {
+          console.log('Same cell - snapping back')
+          gameObject.x = this.dragStartX
+          gameObject.y = this.dragStartY
+          this.draggedCell = null
+          this.updateDebugDisplay()
+        }
         return
       }
 
@@ -1707,7 +2555,10 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
             this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
           }
-          await this.destroyCells()
+
+          // Count destroyed cells, destroy them, and award points
+          await this.awardPowerUpScore()
+
           await this.makeCellsFall()
           await this.refillBoard()
         }
@@ -1753,14 +2604,19 @@ export default class GameScene extends Phaser.Scene {
 
             cascades++
           }
-          const winningMoves = this.getWinningMoves()
-          console.log(`${winningMoves.length} winning moves`)
-          if (this.debugMode) {
-            console.log('[DEBUG] Skipping "no more moves" check in debug mode')
-          }
-          // Skip game over check in debug mode to allow continued testing
-          if (winningMoves.length === 0 && !this.debugMode) {
-            this.gameOver('No more moves!')
+          // Check for game over conditions AFTER all cascades have finished
+          if (this.moves <= 0) {
+            this.gameOver('Out of moves!')
+          } else {
+            const winningMoves = this.getWinningMoves()
+            console.log(`${winningMoves.length} winning moves`)
+            if (this.debugMode) {
+              console.log('[DEBUG] Skipping "no more moves" check in debug mode')
+            }
+            // Skip game over check in debug mode to allow continued testing
+            if (winningMoves.length === 0 && !this.debugMode) {
+              this.gameOver('No more moves!')
+            }
           }
         } else {
           // Invalid move - swap back and play error sound
@@ -1819,6 +2675,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     cell.powerup = type
+    cell.color = type  // Update color to match power-up type
     cell.sprite.destroy()
 
     const x = col * CELL_SIZE + CELL_SIZE / 2
@@ -1876,6 +2733,155 @@ export default class GameScene extends Phaser.Scene {
       return
     }
 
+    if (name === 'fly-away-test' || name === 'flyaway-test') {
+      // Load a test board for Fly-Away with some matching neighbors for good targeting
+      const flyAwayTestBoard = [
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['white', 'orange', 'blue', 'blue', 'green', 'yellow', 'white', 'orange'],  // Fly-away at [4,3], adjacent blue at [4,2]
+        ['orange', 'blue', 'blue', 'green', 'yellow', 'white', 'orange', 'blue'],   // Two blues here for fly-away to target
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = flyAwayTestBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn Fly-Away in the center
+      this.spawnPowerup('fly-away', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with Fly-Away at center [4, 4]`)
+      console.log('[DEBUG] Swap the Fly-Away to activate it (should explode at start, fly to best target, explode again)')
+      return
+    }
+
+    if (name === 'rocket-flyaway-test' || name === 'rocket-fly-away-test') {
+      // Load a test board for Rocket + Fly-Away combinations
+      const rocketFlyawayBoard = [
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = rocketFlyawayBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn Rocket + Fly-Away pairs for testing
+      this.spawnPowerup('horizontal-rocket', 3, 3)
+      this.spawnPowerup('fly-away', 3, 4)
+
+      this.spawnPowerup('vertical-rocket', 5, 3)
+      this.spawnPowerup('fly-away', 5, 4)
+
+      console.log(`[DEBUG] Loaded ${name} with Rocket + Fly-Away combinations`)
+      console.log('[DEBUG] - H-Rocket + Fly-Away at [3,3] and [3,4] = Finds best target, destroys entire row')
+      console.log('[DEBUG] - V-Rocket + Fly-Away at [5,3] and [5,4] = Finds best target, destroys entire column')
+      return
+    }
+
+    if (name === 'combo-test' || name === 'combination-test') {
+      // Load a test board with multiple power-ups for testing combinations
+      const comboTestBoard = [
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = comboTestBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn various power-ups for testing combinations
+      this.spawnPowerup('horizontal-rocket', 2, 2)
+      this.spawnPowerup('vertical-rocket', 2, 3)
+      this.spawnPowerup('tnt', 2, 5)
+      this.spawnPowerup('horizontal-rocket', 2, 6)
+
+      this.spawnPowerup('tnt', 4, 2)
+      this.spawnPowerup('tnt', 4, 3)
+      this.spawnPowerup('color-bomb', 4, 5)
+      this.spawnPowerup('vertical-rocket', 4, 6)
+
+      this.spawnPowerup('fly-away', 6, 2)
+      this.spawnPowerup('fly-away', 6, 3)
+      this.spawnPowerup('color-bomb', 6, 5)
+      this.spawnPowerup('color-bomb', 6, 6)
+
+      console.log(`[DEBUG] Loaded ${name} with multiple power-ups for combination testing`)
+      console.log('[DEBUG] Try swapping adjacent power-ups to test combinations!')
+      console.log('[DEBUG] Row 2: H-Rocket+V-Rocket, TNT+H-Rocket')
+      console.log('[DEBUG] Row 4: TNT+TNT, Color Bomb+V-Rocket')
+      console.log('[DEBUG] Row 6: Fly-Away+Fly-Away, Color Bomb+Color Bomb (BOARD CLEAR!)')
+      return
+    }
+
     // Predefined test boards
     const testBoards: { [key: string]: string[][] } = {
       match5: [
@@ -1907,26 +2913,6 @@ export default class GameScene extends Phaser.Scene {
         ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
         ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
         ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
-      ],
-      'rect3x2': [
-        ['green', 'blue', 'blue', 'yellow', 'white', 'orange', 'red', 'green'],
-        ['blue', 'blue', 'blue', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
-        ['white', 'orange', 'red', 'green', 'yellow', 'white', 'orange', 'red'],
-        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'red', 'green'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white']
-      ],
-      'rect2x3': [
-        ['green', 'blue', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['blue', 'blue', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
-        ['blue', 'blue', 'orange', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
-        ['white', 'orange', 'red', 'green', 'yellow', 'white', 'orange', 'red'],
-        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'red', 'green'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white']
       ],
       match4h: [
         ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'white'],
