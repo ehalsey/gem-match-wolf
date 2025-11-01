@@ -1908,26 +1908,6 @@ export default class GameScene extends Phaser.Scene {
         ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
         ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
       ],
-      'rect3x2': [
-        ['green', 'blue', 'blue', 'yellow', 'white', 'orange', 'red', 'green'],
-        ['blue', 'blue', 'blue', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
-        ['white', 'orange', 'red', 'green', 'yellow', 'white', 'orange', 'red'],
-        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'red', 'green'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white']
-      ],
-      'rect2x3': [
-        ['green', 'blue', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['blue', 'blue', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
-        ['blue', 'blue', 'orange', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white'],
-        ['white', 'orange', 'red', 'green', 'yellow', 'white', 'orange', 'red'],
-        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'red', 'green'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow'],
-        ['green', 'yellow', 'white', 'orange', 'red', 'green', 'yellow', 'white']
-      ],
       match4h: [
         ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'white'],
         ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
