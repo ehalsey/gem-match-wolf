@@ -8,6 +8,7 @@ import {
 } from './constants'
 import { ConfirmPopup } from './ConfirmPopup'
 import { ScoreStorageService } from './ScoreStorageService'
+import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
 
 const gems = [
   'blue',
@@ -57,6 +58,8 @@ export default class GameScene extends Phaser.Scene {
   debugMode: boolean
   testBoard: string | null
   lastSwap: { from: Position, to: Position } | null
+  currentChallenge: Challenge
+  levelConfig: LevelConfig
 
   constructor () {
     super({
@@ -134,8 +137,15 @@ export default class GameScene extends Phaser.Scene {
 
     this.initBoard()
 
+    // Initialize level and challenge
+    this.levelConfig = LevelSystem.getCurrentLevelConfig()
+    this.currentChallenge = { ...this.levelConfig.challenge }  // Clone the challenge
+
     this.setScore(0)
-    this.setMoves(30)
+    this.setMoves(this.levelConfig.moves)
+
+    // Notify MenuScene of initial challenge state
+    this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
 
     // Expose debug commands to console (always available)
     this.exposeDebugCommands()
@@ -168,8 +178,17 @@ export default class GameScene extends Phaser.Scene {
     this.isGameOver = false
     this.destroyBoard()
     this.initBoard()
+
+    // Initialize level and challenge
+    this.levelConfig = LevelSystem.getCurrentLevelConfig()
+    this.currentChallenge = { ...this.levelConfig.challenge }
+
     this.setScore(0)
-    this.setMoves(30)
+    this.setMoves(this.levelConfig.moves)
+
+    // Notify MenuScene of challenge reset
+    this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+
     if (this.gameOverScreen) {
       this.gameOverScreen.destroy()
       this.gameOverScreen = null
@@ -251,6 +270,7 @@ export default class GameScene extends Phaser.Scene {
   setScore (score: number) {
     this.score = score
     this.registry.set('score', score)
+    this.updateChallengeForScore(score)
   }
 
   setMoves (moves: number) {
@@ -261,6 +281,66 @@ export default class GameScene extends Phaser.Scene {
   decrementMoves () {
     this.setMoves(this.moves - 1)
     if (this.moves <= 0) {
+      this.checkLevelCompletion()
+    }
+  }
+
+  /**
+   * Update challenge progress based on score changes
+   */
+  updateChallengeForScore (newScore: number) {
+    if (this.currentChallenge.type === 'score-target') {
+      this.currentChallenge.currentValue = newScore
+      this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+    }
+  }
+
+  /**
+   * Update challenge progress when gems are matched
+   */
+  updateChallengeForMatches (chains: Cell[][]) {
+    if (this.currentChallenge.type === 'color-match') {
+      const targetColor = this.currentChallenge.color
+      let matchedCount = 0
+
+      chains.forEach(chain => {
+        chain.forEach(cell => {
+          if (cell.color === targetColor) {
+            matchedCount++
+          }
+        })
+      })
+
+      if (matchedCount > 0) {
+        this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, matchedCount)
+        this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+      }
+    }
+  }
+
+  /**
+   * Update challenge progress when power-ups are created
+   */
+  updateChallengeForPowerUp (powerUpType: PowerUpType) {
+    if (this.currentChallenge.type === 'power-up-create') {
+      if (powerUpType === this.currentChallenge.powerUpType) {
+        this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, 1)
+        this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+      }
+    }
+  }
+
+  /**
+   * Check if level is complete or failed
+   */
+  checkLevelCompletion () {
+    const challengeComplete = LevelSystem.isChallengeComplete(this.currentChallenge)
+
+    if (challengeComplete) {
+      // Level completed!
+      this.gameOver('Level Complete!', true)
+    } else if (this.moves <= 0) {
+      // Out of moves and challenge not complete
       this.gameOver('Out of moves!')
     }
   }
@@ -334,6 +414,9 @@ export default class GameScene extends Phaser.Scene {
       let cascades = 0
       while (this.boardShouldExplode()) {
         const chains = this.getExplodingChains()
+
+        // Track challenge progress for matched gems
+        this.updateChallengeForMatches(chains)
 
         console.log('=== BEFORE POWER-UP CREATION ===')
         this.logBoardState()
@@ -418,8 +501,14 @@ export default class GameScene extends Phaser.Scene {
     return winningMoves
   }
 
-  gameOver (message: string = 'Game Over') {
+  gameOver (message: string = 'Game Over', isLevelComplete: boolean = false) {
     this.isGameOver = true
+
+    // If level complete, advance to next level
+    if (isLevelComplete) {
+      const nextLevel = LevelSystem.advanceLevel()
+      console.log(`Level complete! Advanced to level ${nextLevel}`)
+    }
 
     // Update personal best
     const isNewBest = ScoreStorageService.updatePersonalBest(this.score)
@@ -428,11 +517,14 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0)
       .setFillStyle(0x000000, 0.8)
 
+    // Color the title based on success or failure
+    const titleColor = isLevelComplete ? '#00FF00' : '#FF4444'
+
     const gameOverTitle = this.add.text(0, -50, message)
       .setOrigin(0.5)
       .setFontFamily('Arial')
       .setFontSize(32)
-      .setColor('#FF4444')
+      .setColor(titleColor)
       .setFontStyle('bold')
 
     const finalScoreText = this.add.text(0, 10, `Final Score: ${this.score}`)
@@ -450,7 +542,12 @@ export default class GameScene extends Phaser.Scene {
       .setColor('#00FF00')
       .setFontStyle('bold') : null
 
-    const restartHint = this.add.text(0, isNewBest ? 70 : 60, 'Click "New Game" to restart')
+    // Different hint based on level complete or game over
+    const hintText = isLevelComplete
+      ? `Click "New Game" to start Level ${LevelSystem.getCurrentLevel()}`
+      : 'Click "New Game" to retry'
+
+    const restartHint = this.add.text(0, isNewBest ? 70 : 60, hintText)
       .setOrigin(0.5)
       .setFontFamily('Arial')
       .setFontSize(18)
@@ -833,6 +930,9 @@ export default class GameScene extends Phaser.Scene {
 
     // Create power-up creation burst effect
     this.createPowerUpBurst(x, y, powerUpType)
+
+    // Track challenge progress for power-up creation
+    this.updateChallengeForPowerUp(powerUpType)
   }
 
   createPowerUpBurst (x: number, y: number, powerUpType: PowerUpType) {
@@ -1716,6 +1816,10 @@ export default class GameScene extends Phaser.Scene {
           let cascades = 0
           while (this.boardShouldExplode()) {
             const chains = this.getExplodingChains()
+
+            // Track challenge progress for matched gems
+            this.updateChallengeForMatches(chains)
+
             this.createPowerUpsFromChains(chains, null)
             this.showFloatingScores(chains, cascades)
             await this.destroyCells()
@@ -1786,6 +1890,9 @@ export default class GameScene extends Phaser.Scene {
           let cascades = 0
           while (this.boardShouldExplode()) {
             const chains = this.getExplodingChains()
+
+            // Track challenge progress for matched gems
+            this.updateChallengeForMatches(chains)
 
             console.log('=== BEFORE POWER-UP CREATION (drag) ===')
             this.logBoardState()
