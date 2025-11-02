@@ -9,6 +9,8 @@ import {
 import { ConfirmPopup } from './ConfirmPopup'
 import { ScoreStorageService } from './ScoreStorageService'
 import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
+import { MatchDetector } from './game/MatchDetector'
+import { type Cell, type PowerUpType, type Position } from './types'
 
 const gems = [
   'blue',
@@ -18,28 +20,12 @@ const gems = [
   'yellow'
 ]
 
-type PowerUpType = 'horizontal-rocket' | 'vertical-rocket' | 'tnt' | 'light-ball' | 'fly-away' | null
-
 /**
  * Number of cells required to trigger an explosion
  */
 const explosionThreshold = 3
 const swapDuration = 540 // ms (3x slower)
 const destroyDuration = 540 // ms (3x slower)
-
-type Position = {
-  row: number
-  column: number
-}
-
-type Cell = {
-  row: number
-  column: number
-  color: string
-  sprite: Phaser.GameObjects.Sprite
-  empty: boolean
-  powerup: PowerUpType
-}
 
 export default class GameScene extends Phaser.Scene {
   board: Cell[][]
@@ -259,7 +245,7 @@ export default class GameScene extends Phaser.Scene {
         for (let color of gems) {
           cell.color = color
           // Check for both 3+ matches AND 2x2 squares
-          if (!this.shouldExplode(cell) && !this.wouldCreate2x2Square(cell)) {
+          if (!MatchDetector.shouldExplode(cell, this.board) && !MatchDetector.wouldCreate2x2Square(cell, this.board)) {
             possibleColors.push(color)
           }
         }
@@ -462,7 +448,7 @@ export default class GameScene extends Phaser.Scene {
       return
     }
 
-    if (!this.cellsAreNeighbours(firstCell, secondCell)) {
+    if (!MatchDetector.cellsAreNeighbours(firstCell, secondCell)) {
       this.selectCell(secondCell)
       return
     }
@@ -494,13 +480,13 @@ export default class GameScene extends Phaser.Scene {
       await this.refillBoard()
     }
 
-    if (this.boardShouldExplode() || hasPowerUp) {
+    if (MatchDetector.boardShouldExplode(this.board) || hasPowerUp) {
       // Valid move - decrement moves counter
       this.decrementMoves()
 
       let cascades = 0
-      while (this.boardShouldExplode()) {
-        const chains = this.getExplodingChains()
+      while (MatchDetector.boardShouldExplode(this.board)) {
+        const chains = MatchDetector.getExplodingChains(this.board)
 
         // Track challenge progress for matched gems
         this.updateChallengeForMatches(chains)
@@ -578,14 +564,14 @@ export default class GameScene extends Phaser.Scene {
 
         // Swap right
         this.swapCells(cell, right)
-        if (this.boardShouldExplode()) {
+        if (MatchDetector.boardShouldExplode(this.board)) {
           winningMoves.push({ cell1: cell, cell2: right })
         }
         this.swapCells(cell, right)
 
         // Swap down
         this.swapCells(cell, down)
-        if (this.boardShouldExplode()) {
+        if (MatchDetector.boardShouldExplode(this.board)) {
           winningMoves.push({ cell1: cell, cell2: down })
         }
         this.swapCells(cell, down)
@@ -1406,8 +1392,8 @@ export default class GameScene extends Phaser.Scene {
               await this.refillBoard()
 
               // Continue with cascades if there are more matches
-              while (this.boardShouldExplode()) {
-                const chains = this.getExplodingChains()
+              while (MatchDetector.boardShouldExplode(this.board)) {
+                const chains = MatchDetector.getExplodingChains(this.board)
                 this.createPowerUpsFromChains(chains)
                 await this.destroyCells()
                 this.setScore(this.score + this.computeScore(chains, 0))
@@ -1612,34 +1598,6 @@ export default class GameScene extends Phaser.Scene {
     return null
   }
 
-  getExplodingChains (): Cell[][] {
-    const rows = this.board
-    const columns = Phaser.Utils.Array.Matrix.TransposeMatrix(this.board)
-
-    return [...rows, ...columns].flatMap(line => this.getExplodingChainsOnLine(line))
-  }
-
-  getExplodingChainsOnLine (line: Cell[]): Cell[][] {
-    const chains: Cell[][] = []
-
-    let i = 0
-    while (i < line.length) {
-      let j = i + 1
-      while (j < line.length && line[j].color === line[i].color) {
-        j++
-      }
-
-      const chain = line.slice(i, j)
-      if (chain.length >= explosionThreshold) {
-        chains.push(chain)
-        i = j
-      } else {
-        i++
-      }
-    }
-
-    return chains
-  }
 
   async destroyCells () {
     const cellsToDestroy = this.getCellsToDestroy()
@@ -1706,7 +1664,7 @@ export default class GameScene extends Phaser.Scene {
   getCellsToDestroy (): Cell[] {
     return this.board.flat().filter(cell =>
       // Destroy cells that should explode (matching 3+) or are marked as empty
-      (this.shouldExplode(cell) || cell.empty) && !cell.powerup
+      (MatchDetector.shouldExplode(cell, this.board) || cell.empty) && !cell.powerup
     )
   }
 
@@ -1761,125 +1719,11 @@ export default class GameScene extends Phaser.Scene {
     this.board[secondCell.row][secondCell.column] = secondCell
   }
 
-  boardShouldExplode (): boolean {
-    // Check for regular 3+ matches
-    const hasRegularMatches = this.board.some(row => row.some(cell => this.shouldExplode(cell)))
-
-    // Also check for special patterns (2x2 squares, L-shapes)
-    const hasSpecialPatterns = this.detectSpecialPatterns().length > 0
-
-    return hasRegularMatches || hasSpecialPatterns
-  }
-
-  shouldExplode (cell: Cell): boolean {
-    // Power-ups don't explode as part of normal matches - they must be activated
-    if (cell.powerup) {
-      return false
-    }
-    return this.shouldExplodeHorizontally(cell) || this.shouldExplodeVertically(cell)
-  }
-
-  wouldCreate2x2Square (cell: Cell): boolean {
-    // Check if placing this cell would create a 2x2 square
-    // Only check cells that have been filled already (during board initialization)
-    const { row, column, color } = cell
-
-    // Check if cell is top-left of a 2x2 square
-    if (row < size - 1 && column < size - 1) {
-      const topRight = this.board[row][column + 1]
-      const bottomLeft = this.board[row + 1][column]
-      const bottomRight = this.board[row + 1][column + 1]
-      if (!topRight.empty && !bottomLeft.empty && !bottomRight.empty &&
-          topRight.color === color && bottomLeft.color === color && bottomRight.color === color) {
-        return true
-      }
-    }
-
-    // Check if cell is top-right of a 2x2 square
-    if (row < size - 1 && column > 0) {
-      const topLeft = this.board[row][column - 1]
-      const bottomLeft = this.board[row + 1][column - 1]
-      const bottomRight = this.board[row + 1][column]
-      if (!topLeft.empty && !bottomLeft.empty && !bottomRight.empty &&
-          topLeft.color === color && bottomLeft.color === color && bottomRight.color === color) {
-        return true
-      }
-    }
-
-    // Check if cell is bottom-left of a 2x2 square
-    if (row > 0 && column < size - 1) {
-      const topLeft = this.board[row - 1][column]
-      const topRight = this.board[row - 1][column + 1]
-      const bottomRight = this.board[row][column + 1]
-      if (!topLeft.empty && !topRight.empty && !bottomRight.empty &&
-          topLeft.color === color && topRight.color === color && bottomRight.color === color) {
-        return true
-      }
-    }
-
-    // Check if cell is bottom-right of a 2x2 square
-    if (row > 0 && column > 0) {
-      const topLeft = this.board[row - 1][column - 1]
-      const topRight = this.board[row - 1][column]
-      const bottomLeft = this.board[row][column - 1]
-      if (!topLeft.empty && !topRight.empty && !bottomLeft.empty &&
-          topLeft.color === color && topRight.color === color && bottomLeft.color === color) {
-        return true
-      }
-    }
-
-    return false
-  }
-
-  shouldExplodeHorizontally ({ row, column }: Cell): boolean {
-    // TODO: optim: expand left/right and return right - left >= threshold
-    for (let startPosition = column - explosionThreshold + 1; startPosition <= column; startPosition++) {
-      const endPosition = startPosition + explosionThreshold - 1
-      if (startPosition >= 0 && endPosition < size) {
-        let explosion = true
-        for (let index = startPosition; index < endPosition; index++) {
-          if (this.board[row][index].color !== this.board[row][index + 1].color) {
-            explosion = false
-            break
-          }
-        }
-        if (explosion) {
-          return true
-        }
-      }
-    }
-    return false
-  }
-
-  shouldExplodeVertically ({ row, column }: Cell): boolean {
-    for (let startPosition = row - explosionThreshold + 1; startPosition <= row; startPosition++) {
-      const endPosition = startPosition + explosionThreshold - 1
-      if (startPosition >= 0 && endPosition < size) {
-        let explosion = true
-        for (let index = startPosition; index < endPosition; index++) {
-          if (this.board[index][column].color !== this.board[index + 1][column].color) {
-            explosion = false
-            break
-          }
-        }
-        if (explosion) {
-          return true
-        }
-      }
-    }
-    return false
-  }
-
   getCellAt (pointer: Phaser.Input.Pointer): Cell {
     const row = Math.floor(pointer.worldY / CELL_SIZE)
     const column = Math.floor(pointer.worldX / CELL_SIZE)
 
     return this.board[row][column]
-  }
-
-  cellsAreNeighbours (cell1: Cell, cell2: Cell): boolean {
-    return (cell1.row === cell2.row && (cell1.column === cell2.column + 1 || cell1.column === cell2.column - 1)) ||
-      (cell1.column === cell2.column && (cell1.row === cell2.row + 1 || cell1.row === cell2.row - 1))
   }
 
   onDragStart (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Sprite) {
@@ -1978,8 +1822,8 @@ export default class GameScene extends Phaser.Scene {
 
           // Continue game loop for cascades
           let cascades = 0
-          while (this.boardShouldExplode()) {
-            const chains = this.getExplodingChains()
+          while (MatchDetector.boardShouldExplode(this.board)) {
+            const chains = MatchDetector.getExplodingChains(this.board)
 
             // Track challenge progress for matched gems
             this.updateChallengeForMatches(chains)
@@ -2011,7 +1855,7 @@ export default class GameScene extends Phaser.Scene {
       }
 
       // If it's a neighbor, perform the swap
-      const areNeighbors = this.cellsAreNeighbours(draggedCell, targetCell)
+      const areNeighbors = MatchDetector.cellsAreNeighbours(draggedCell, targetCell)
       console.log(`Are neighbors: ${areNeighbors}`)
       if (areNeighbors) {
         const firstCell = draggedCell
@@ -2048,7 +1892,7 @@ export default class GameScene extends Phaser.Scene {
           await this.refillBoard()
         }
 
-        const shouldExplode = this.boardShouldExplode()
+        const shouldExplode = MatchDetector.boardShouldExplode(this.board)
         console.log(`Board should explode: ${shouldExplode}, has power-up: ${hasPowerUp}`)
 
         if (shouldExplode || hasPowerUp) {
@@ -2057,8 +1901,8 @@ export default class GameScene extends Phaser.Scene {
           this.decrementMoves()
 
           let cascades = 0
-          while (this.boardShouldExplode()) {
-            const chains = this.getExplodingChains()
+          while (MatchDetector.boardShouldExplode(this.board)) {
+            const chains = MatchDetector.getExplodingChains(this.board)
 
             // Track challenge progress for matched gems
             this.updateChallengeForMatches(chains)
