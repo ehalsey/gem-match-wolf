@@ -46,7 +46,7 @@ export class LevelSystem {
     hard: 20
   }
 
-  private static readonly GEM_COLORS = ['red', 'blue', 'green', 'yellow', 'orange', 'white']
+  private static readonly GEM_COLORS = ['red', 'blue', 'green', 'yellow', 'orange', 'pink']
 
   private static readonly POWER_UP_TYPES = [
     { id: 'horizontal-rocket', name: 'Horizontal Rocket' },

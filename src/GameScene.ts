@@ -15,7 +15,7 @@ const gems = [
   'green',
   'orange',
   'red',
-  'white',
+  'pink',
   'yellow'
 ]
 
@@ -1637,7 +1637,7 @@ export default class GameScene extends Phaser.Scene {
       green: 0x4dff4d,
       orange: 0xffaa4d,
       red: 0xff4d4d,
-      white: 0xffffff,
+      pink: 0xff66ff,
       yellow: 0xffff4d
     }
 
