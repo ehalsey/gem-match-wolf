@@ -947,8 +947,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Clear the power-up property and mark for destruction
     cell.powerup = null
-    cell.markedForDestruction = true
-    cell.empty = true
+    this.markCellForDestructionImmediate(cell)
 
     // Mark additional cells based on power-up type
     // Also chain-activate any power-ups we hit
@@ -963,12 +962,11 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
             this.triggerPowerUp(targetCell, undefined, targetedCells)
           } else {
-            targetCell.markedForDestruction = true
-            targetCell.empty = true
             // Count toward challenge if this is the challenge color
             if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
               horizontalChallengeCount++
             }
+            this.markCellForDestructionImmediate(targetCell)
           }
         }
         // Update challenge progress
@@ -989,12 +987,11 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
             this.triggerPowerUp(targetCell, undefined, targetedCells)
           } else {
-            targetCell.markedForDestruction = true
-            targetCell.empty = true
             // Count toward challenge if this is the challenge color
             if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
               verticalChallengeCount++
             }
+            this.markCellForDestructionImmediate(targetCell)
           }
         }
         // Update challenge progress
@@ -1033,12 +1030,11 @@ export default class GameScene extends Phaser.Scene {
                   console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
                   this.triggerPowerUp(targetCell, undefined, targetedCells)
                 } else {
-                  targetCell.markedForDestruction = true
-            targetCell.empty = true
                   // Count toward challenge if this is the challenge color
                   if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetColor === this.currentChallenge.color) {
                     challengeGemCount++
                   }
+                  this.markCellForDestructionImmediate(targetCell)
                 }
               }
             }
@@ -1073,12 +1069,11 @@ export default class GameScene extends Phaser.Scene {
                 console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
                 this.triggerPowerUp(targetCell, undefined, targetedCells)
               } else {
-                targetCell.markedForDestruction = true
-            targetCell.empty = true
                 // Count toward challenge if this is the challenge color
                 if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
                   tntChallengeCount++
                 }
+                this.markCellForDestructionImmediate(targetCell)
               }
             }
           }
@@ -1110,12 +1105,11 @@ export default class GameScene extends Phaser.Scene {
                 console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}] from fly-away start`)
                 this.triggerPowerUp(targetCell, undefined, targetedCells)
               } else {
-                targetCell.markedForDestruction = true
-            targetCell.empty = true
                 // Count toward challenge if this is the challenge color
                 if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
                   flyAwayStartChallengeCount++
                 }
+                this.markCellForDestructionImmediate(targetCell)
               }
             }
           }
@@ -1477,6 +1471,20 @@ export default class GameScene extends Phaser.Scene {
     await Promise.all(
       cellsToDestroy.map(cell => this.destroyCell(cell))
     )
+  }
+
+  /**
+   * Helper method to mark a cell for destruction and immediately destroy its sprite
+   * This prevents "ghost sprites" - empty cells with visible sprites
+   */
+  markCellForDestructionImmediate (cell: Cell) {
+    cell.markedForDestruction = true
+    cell.empty = true
+    // Immediately destroy the sprite to prevent ghost gems
+    if (cell.sprite) {
+      cell.sprite.destroy()
+      cell.sprite = null
+    }
   }
 
   destroyCell (cell: Cell) {
