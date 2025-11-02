@@ -1303,7 +1303,14 @@ export default class GameScene extends Phaser.Scene {
         alpha: 0,
         duration: destroyDuration,
         ease: 'Cubic.easeOut',
-        onComplete: () => resolve()
+        onComplete: () => {
+          // IMPORTANT: Destroy the sprite to prevent ghost gems
+          if (cell.sprite) {
+            cell.sprite.destroy()
+            cell.sprite = null
+          }
+          resolve()
+        }
       })
     })
   }
