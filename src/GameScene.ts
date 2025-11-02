@@ -948,6 +948,7 @@ export default class GameScene extends Phaser.Scene {
     // Clear the power-up property and mark for destruction
     cell.powerup = null
     cell.markedForDestruction = true
+    cell.empty = true
 
     // Mark additional cells based on power-up type
     // Also chain-activate any power-ups we hit
@@ -963,14 +964,15 @@ export default class GameScene extends Phaser.Scene {
             this.triggerPowerUp(targetCell, undefined, targetedCells)
           } else {
             targetCell.markedForDestruction = true
+            targetCell.empty = true
             // Count toward challenge if this is the challenge color
-            if (this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
               horizontalChallengeCount++
             }
           }
         }
         // Update challenge progress
-        if (horizontalChallengeCount > 0) {
+        if (horizontalChallengeCount > 0 && this.currentChallenge) {
           console.log(`[CHALLENGE] Horizontal rocket destroyed ${horizontalChallengeCount} ${this.currentChallenge.color} gems`)
           this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, horizontalChallengeCount)
           this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
@@ -988,14 +990,15 @@ export default class GameScene extends Phaser.Scene {
             this.triggerPowerUp(targetCell, undefined, targetedCells)
           } else {
             targetCell.markedForDestruction = true
+            targetCell.empty = true
             // Count toward challenge if this is the challenge color
-            if (this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
               verticalChallengeCount++
             }
           }
         }
         // Update challenge progress
-        if (verticalChallengeCount > 0) {
+        if (verticalChallengeCount > 0 && this.currentChallenge) {
           console.log(`[CHALLENGE] Vertical rocket destroyed ${verticalChallengeCount} ${this.currentChallenge.color} gems`)
           this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, verticalChallengeCount)
           this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
@@ -1017,7 +1020,7 @@ export default class GameScene extends Phaser.Scene {
         if (targetColor) {
           // Track challenge progress if we're destroying the challenge color
           let challengeGemCount = 0
-          if (this.currentChallenge.type === 'color-match' && targetColor === this.currentChallenge.color) {
+          if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetColor === this.currentChallenge.color) {
             console.log(`[CHALLENGE] Color bomb targeting challenge color: ${targetColor}`)
           }
 
@@ -1031,8 +1034,9 @@ export default class GameScene extends Phaser.Scene {
                   this.triggerPowerUp(targetCell, undefined, targetedCells)
                 } else {
                   targetCell.markedForDestruction = true
+            targetCell.empty = true
                   // Count toward challenge if this is the challenge color
-                  if (this.currentChallenge.type === 'color-match' && targetColor === this.currentChallenge.color) {
+                  if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetColor === this.currentChallenge.color) {
                     challengeGemCount++
                   }
                 }
@@ -1041,7 +1045,7 @@ export default class GameScene extends Phaser.Scene {
           }
 
           // Update challenge progress for all destroyed gems of the challenge color
-          if (challengeGemCount > 0) {
+          if (challengeGemCount > 0 && this.currentChallenge) {
             console.log(`[CHALLENGE] Color bomb destroyed ${challengeGemCount} ${targetColor} gems`)
             this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, challengeGemCount)
             this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
@@ -1070,8 +1074,9 @@ export default class GameScene extends Phaser.Scene {
                 this.triggerPowerUp(targetCell, undefined, targetedCells)
               } else {
                 targetCell.markedForDestruction = true
+            targetCell.empty = true
                 // Count toward challenge if this is the challenge color
-                if (this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
                   tntChallengeCount++
                 }
               }
@@ -1079,7 +1084,7 @@ export default class GameScene extends Phaser.Scene {
           }
         }
         // Update challenge progress
-        if (tntChallengeCount > 0) {
+        if (tntChallengeCount > 0 && this.currentChallenge) {
           console.log(`[CHALLENGE] TNT destroyed ${tntChallengeCount} ${this.currentChallenge.color} gems`)
           this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, tntChallengeCount)
           this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
@@ -1106,15 +1111,16 @@ export default class GameScene extends Phaser.Scene {
                 this.triggerPowerUp(targetCell, undefined, targetedCells)
               } else {
                 targetCell.markedForDestruction = true
+            targetCell.empty = true
                 // Count toward challenge if this is the challenge color
-                if (this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
                   flyAwayStartChallengeCount++
                 }
               }
             }
           }
           // Update challenge progress for start explosion
-          if (flyAwayStartChallengeCount > 0) {
+          if (flyAwayStartChallengeCount > 0 && this.currentChallenge) {
             console.log(`[CHALLENGE] Fly-away start explosion destroyed ${flyAwayStartChallengeCount} ${this.currentChallenge.color} gems`)
             this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, flyAwayStartChallengeCount)
             this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
@@ -1208,7 +1214,7 @@ export default class GameScene extends Phaser.Scene {
                   this.triggerPowerUp(targetCell)
                 } else if (!targetCell.empty) {
                   // Count toward challenge if this is the challenge color
-                  if (this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                  if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
                     flyAwayTargetChallengeCount++
                   }
                   // Visually destroy the cell (destroyCell will set empty)
@@ -1219,14 +1225,14 @@ export default class GameScene extends Phaser.Scene {
             // Destroy target itself (destroyCell will set empty)
             if (!toCell.empty) {
               // Count toward challenge if this is the challenge color
-              if (this.currentChallenge.type === 'color-match' && toCell.color === this.currentChallenge.color) {
+              if (this.currentChallenge && this.currentChallenge.type === 'color-match' && toCell.color === this.currentChallenge.color) {
                 flyAwayTargetChallengeCount++
               }
               this.destroyCell(toCell)
             }
 
             // Update challenge progress for target explosion
-            if (flyAwayTargetChallengeCount > 0) {
+            if (flyAwayTargetChallengeCount > 0 && this.currentChallenge) {
               console.log(`[CHALLENGE] Fly-away target explosion destroyed ${flyAwayTargetChallengeCount} ${this.currentChallenge.color} gems`)
               this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, flyAwayTargetChallengeCount)
               this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
