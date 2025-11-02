@@ -32,6 +32,8 @@ export interface LevelConfig {
 
 export class LevelSystem {
   private static readonly STORAGE_KEY = 'gem-match-current-level'
+  private static readonly LIVES_KEY = 'gem-match-lives'
+  private static readonly MAX_LIVES = 5
 
   // Difficulty rotation pattern: Easy, Easy, Medium, Easy, Hard, Easy (repeat)
   private static readonly DIFFICULTY_PATTERN: Difficulty[] = [
@@ -241,5 +243,45 @@ export class LevelSystem {
    */
   static reset(): void {
     this.setCurrentLevel(1)
+    this.resetLives()
+  }
+
+  /**
+   * Get current lives
+   */
+  static getLives(): number {
+    const stored = localStorage.getItem(this.LIVES_KEY)
+    return stored ? parseInt(stored, 10) : this.MAX_LIVES
+  }
+
+  /**
+   * Set lives
+   */
+  static setLives(lives: number): void {
+    localStorage.setItem(this.LIVES_KEY, lives.toString())
+  }
+
+  /**
+   * Decrement lives by 1
+   */
+  static decrementLives(): number {
+    const currentLives = this.getLives()
+    const newLives = Math.max(0, currentLives - 1)
+    this.setLives(newLives)
+    return newLives
+  }
+
+  /**
+   * Reset lives to max
+   */
+  static resetLives(): void {
+    this.setLives(this.MAX_LIVES)
+  }
+
+  /**
+   * Check if player has lives remaining
+   */
+  static hasLivesRemaining(): boolean {
+    return this.getLives() > 0
   }
 }
