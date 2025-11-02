@@ -1238,6 +1238,9 @@ export default class GameScene extends Phaser.Scene {
 
     for (const cell of cells) {
       const sprite = cell.sprite
+      // Skip cells with no sprite (destroyed cells)
+      if (!sprite) continue
+
       const expectedX = cell.column * CELL_SIZE + CELL_SIZE / 2
       const expectedY = cell.row * CELL_SIZE + CELL_SIZE / 2
       if (sprite.x !== expectedX || sprite.y !== expectedY) {
