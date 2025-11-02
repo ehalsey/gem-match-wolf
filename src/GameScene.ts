@@ -288,9 +288,7 @@ export default class GameScene extends Phaser.Scene {
 
   decrementMoves () {
     this.setMoves(this.moves - 1)
-    if (this.moves <= 0) {
-      this.checkLevelCompletion()
-    }
+    // Note: Don't check level completion here - wait for cascades to finish
   }
 
   /**
@@ -541,6 +539,13 @@ export default class GameScene extends Phaser.Scene {
 
         cascades++
       }
+
+      // Check level completion after all cascades settle
+      if (this.moves <= 0) {
+        this.checkLevelCompletion()
+        return  // Don't check for "no more moves" if game is over
+      }
+
       const winningMoves = this.getWinningMoves()
       console.log(`${winningMoves.length} winning moves`)
       if (this.debugMode) {
@@ -1987,6 +1992,11 @@ export default class GameScene extends Phaser.Scene {
             cascades++
           }
 
+          // Check level completion after all cascades settle
+          if (this.moves <= 0) {
+            this.checkLevelCompletion()
+          }
+
           this.moveInProgress = false
           this.updateDebugDisplay()
         } else {
@@ -2082,6 +2092,15 @@ export default class GameScene extends Phaser.Scene {
 
             cascades++
           }
+
+          // Check level completion after all cascades settle
+          if (this.moves <= 0) {
+            this.checkLevelCompletion()
+            this.moveInProgress = false
+            this.updateDebugDisplay()
+            return  // Don't check for "no more moves" if game is over
+          }
+
           const winningMoves = this.getWinningMoves()
           console.log(`${winningMoves.length} winning moves`)
           if (this.debugMode) {
