@@ -120,7 +120,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.loadTestBoard(name)')
       console.log('  - gameDebug.logBoard()')
       console.log('  - gameDebug.getWinningMoves()')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, rect3x2, rect2x3, square, tnt-test')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, rect3x2, rect2x3, square, square-left, tnt-test')
     }
 
     this.createBackground()
@@ -1925,9 +1925,21 @@ export default class GameScene extends Phaser.Scene {
         ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
         ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
       ],
+      // Fly-away test: 3 red cells ready, swap blue at [1,1] with red at [1,2] from RIGHT
       square: [
         ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['red', 'red', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['red', 'blue', 'red', 'orange', 'white', 'yellow', 'green', 'yellow'],
+        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
+        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
+        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
+        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      ],
+      // Fly-away test from LEFT: swap blue at [1,3] with red at [1,2] from LEFT
+      'square-left': [
+        ['yellow', 'white', 'orange', 'red', 'red', 'green', 'blue', 'green'],
+        ['green', 'yellow', 'red', 'blue', 'red', 'orange', 'white', 'yellow'],
         ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
         ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
         ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
