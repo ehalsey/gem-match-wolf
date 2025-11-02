@@ -28,6 +28,7 @@ export interface LevelConfig {
   difficulty: Difficulty
   moves: number
   challenge: Challenge
+  gemTypes: string[]  // Allowed gem colors for this level
 }
 
 export class LevelSystem {
@@ -97,6 +98,26 @@ export class LevelSystem {
   }
 
   /**
+   * Get gem types allowed for a difficulty level
+   * Easy: 4 colors (easier to match)
+   * Medium: 5 colors (standard)
+   * Hard: 5 colors (standard, but fewer moves)
+   */
+  static getGemTypesForDifficulty(difficulty: Difficulty): string[] {
+    switch (difficulty) {
+      case 'easy':
+        // Use first 4 colors for easier matching
+        return this.GEM_COLORS.slice(0, 4)
+      case 'medium':
+      case 'hard':
+        // Use all 5 colors
+        return [...this.GEM_COLORS]
+      default:
+        return [...this.GEM_COLORS]
+    }
+  }
+
+  /**
    * Generate a challenge based on difficulty
    */
   static generateChallenge(difficulty: Difficulty): Challenge {
@@ -155,10 +176,10 @@ export class LevelSystem {
         targetValue = 3000
         break
       case 'medium':
-        targetValue = 6000
+        targetValue = 5000
         break
       case 'hard':
-        targetValue = 10000
+        targetValue = 7000
         break
     }
 
@@ -205,12 +226,14 @@ export class LevelSystem {
     const difficulty = this.getDifficultyForLevel(level)
     const moves = this.getMovesForDifficulty(difficulty)
     const challenge = this.generateChallenge(difficulty)
+    const gemTypes = this.getGemTypesForDifficulty(difficulty)
 
     return {
       level,
       difficulty,
       moves,
-      challenge
+      challenge,
+      gemTypes
     }
   }
 

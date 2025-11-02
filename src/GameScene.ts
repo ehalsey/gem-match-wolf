@@ -241,13 +241,14 @@ export default class GameScene extends Phaser.Scene {
       return
     }
 
-    // Fill board
+    // Fill board using gem types for current level difficulty
+    const levelGems = this.levelConfig ? this.levelConfig.gemTypes : gems
     for (let row = 0; row < size; row++) {
       for (let column = 0; column < size; column++) {
         const cell = this.board[row][column]
 
         const possibleColors = []
-        for (let color of gems) {
+        for (let color of levelGems) {
           cell.color = color
           // Check for both 3+ matches AND 2x2 squares
           if (!MatchDetector.shouldExplode(cell, this.board) && !MatchDetector.wouldCreate2x2Square(cell, this.board)) {
@@ -1206,6 +1207,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   async refillBoard () {
+    // Use gem types from level config for consistent difficulty
+    const levelGems = this.levelConfig ? this.levelConfig.gemTypes : gems
+
     for (let column = 0; column < size; column++) {
       let numberOfEmptyCells = 0
       while (numberOfEmptyCells < size && this.board[numberOfEmptyCells][column].empty) {
@@ -1214,7 +1218,7 @@ export default class GameScene extends Phaser.Scene {
 
       for (let row = 0; row < numberOfEmptyCells; row++) {
         const cell = this.board[row][column]
-        cell.color = Phaser.Math.RND.pick(gems)
+        cell.color = Phaser.Math.RND.pick(levelGems)
         cell.empty = false
         cell.powerup = null
 
