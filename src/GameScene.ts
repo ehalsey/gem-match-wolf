@@ -653,18 +653,53 @@ export default class GameScene extends Phaser.Scene {
         })
     }
 
-    // Different hint based on level complete or game over
-    const hintText = isLevelComplete
-      ? `Click "New Game" to start Level ${LevelSystem.getCurrentLevel()}`
-      : canRetry
-        ? 'Or click "New Game" to start over'
-        : 'Click "New Game" to try again'
+    // Add next level / new game button
+    let actionButton: Phaser.GameObjects.Text | null = null
+    if (isLevelComplete) {
+      // Show "Next Level" button for successful completion
+      actionButton = this.add.text(0, isNewBest ? 70 : 60, 'Next Level →')
+        .setOrigin(0.5)
+        .setFontFamily('Arial')
+        .setFontSize(24)
+        .setColor('#00FF00')
+        .setFontStyle('bold')
+        .setInteractive({ useHandCursor: true })
+        .on('pointerup', () => {
+          this.startNewGame()
+        })
+        .on('pointerover', () => {
+          actionButton.setColor('#ffffff')
+        })
+        .on('pointerout', () => {
+          actionButton.setColor('#00FF00')
+        })
+    } else if (!canRetry) {
+      // Show "New Game" button when out of lives
+      actionButton = this.add.text(0, isNewBest ? 70 : 60, 'New Game')
+        .setOrigin(0.5)
+        .setFontFamily('Arial')
+        .setFontSize(20)
+        .setColor('#4da6ff')
+        .setFontStyle('bold')
+        .setInteractive({ useHandCursor: true })
+        .on('pointerup', () => {
+          this.registry.events.emit('NEW_GAME')
+        })
+        .on('pointerover', () => {
+          actionButton.setColor('#ffffff')
+        })
+        .on('pointerout', () => {
+          actionButton.setColor('#4da6ff')
+        })
+    }
 
-    const restartHint = this.add.text(0, canRetry ? (isNewBest ? 105 : 95) : (isNewBest ? 70 : 60), hintText)
+    // Small hint text at bottom
+    const hintText = canRetry ? 'Or click "New Game" in menu to start over' : ''
+    const restartHint = hintText ? this.add.text(0, canRetry ? (isNewBest ? 105 : 95) : (isNewBest ? 70 : 60), hintText)
       .setOrigin(0.5)
       .setFontFamily('Arial')
-      .setFontSize(14)
-      .setColor('#888888')
+      .setFontSize(12)
+      .setColor('#666666') : null
 
     this.gameOverScreen = this.add.container(0, 0)
       .add(gameOverBackground)
@@ -682,11 +717,18 @@ export default class GameScene extends Phaser.Scene {
       Phaser.Display.Align.In.Center(retryButton, gameOverBackground, 0, isNewBest ? 70 : 60)
     }
 
-    this.gameOverScreen.add(restartHint)
+    if (actionButton) {
+      this.gameOverScreen.add(actionButton)
+      Phaser.Display.Align.In.Center(actionButton, gameOverBackground, 0, isNewBest ? 70 : 60)
+    }
+
+    if (restartHint) {
+      this.gameOverScreen.add(restartHint)
+      Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, canRetry ? (isNewBest ? 105 : 95) : (isNewBest ? 70 : 60))
+    }
 
     Phaser.Display.Align.In.Center(gameOverTitle, gameOverBackground, 0, -50)
     Phaser.Display.Align.In.Center(finalScoreText, gameOverBackground, 0, 10)
-    Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, canRetry ? (isNewBest ? 105 : 95) : (isNewBest ? 70 : 60))
 
     // Notify MenuScene to update personal best display
     this.registry.events.emit('PERSONAL_BEST_UPDATED')
