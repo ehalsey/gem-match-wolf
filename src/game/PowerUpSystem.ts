@@ -357,32 +357,11 @@ export class PowerUpSystem {
   }
 
   /**
-   * Create visual sparkle/shimmer effect when power-up is created
+   * Create visual effect when power-up is created
+   * Currently disabled - no particle effect
    */
   createPowerUpBurst (x: number, y: number, powerUpType: PowerUpType) {
-    let color: number
-    // Choose particle color based on power-up type
-    if (powerUpType === 'light-ball') {
-      color = 0xFFFFFF  // White for color bomb
-    } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
-      color = 0xFF6600  // Orange for rockets
-    } else {
-      color = 0xFFFF00  // Yellow for other power-ups
-    }
-
-    const particles = this.scene.add.particles(x, y, 'blue', {
-      speed: { min: 50, max: 150 },
-      scale: { start: 0.15, end: 0 },
-      alpha: { start: 1, end: 0 },
-      blendMode: 'ADD',
-      lifespan: 500,
-      tint: color,
-      quantity: 25,
-      gravityY: -50  // Slight upward float
-    })
-
-    // Auto-destroy after particles fade
-    this.scene.time.delayedCall(600, () => particles.destroy())
+    // No visual effect - power-up sprite appearance is enough
   }
 
   /**
