@@ -16,6 +16,7 @@ export default class MenuScene extends Phaser.Scene {
   movesValue: Phaser.GameObjects.Text
   challengeLabel: Phaser.GameObjects.Text
   challengeProgress: Phaser.GameObjects.Text
+  challengeGemIcon: Phaser.GameObjects.Sprite | null
   newGameButton: Phaser.GameObjects.Text
   leaderboardButton: Phaser.GameObjects.Text
 
@@ -140,17 +141,27 @@ export default class MenuScene extends Phaser.Scene {
       .setColor('#FFD700')
       .setFontStyle('bold')
 
-    this.challengeProgress = this.add.text(15, 20, levelConfig.challenge.description)
+    this.challengeProgress = this.add.text(35, 20, levelConfig.challenge.description)
       .setFontFamily('Arial')
       .setFontSize(12)
       .setColor('white')
-      .setWordWrapWidth(MENU_WIDTH - 30)
+      .setWordWrapWidth(MENU_WIDTH - 45)
+
+    // Add gem icon for color-match challenges
+    this.challengeGemIcon = null
+    if (levelConfig.challenge.type === 'color-match' && levelConfig.challenge.color) {
+      this.challengeGemIcon = this.add.sprite(20, 28, levelConfig.challenge.color)
+        .setDisplaySize(20, 20)
+    }
 
     this.zone = this.add.zone(0, 0, MENU_WIDTH, MENU_HEIGHT).setOrigin(0)
 
     // Position challenge display
     this.challengeLabel.setPosition(15, 250)
-    this.challengeProgress.setPosition(15, 270)
+    this.challengeProgress.setPosition(35, 270)
+    if (this.challengeGemIcon) {
+      this.challengeGemIcon.setPosition(20, 278)
+    }
 
     // TODO: hint button
 
@@ -188,6 +199,17 @@ export default class MenuScene extends Phaser.Scene {
       } else {
         this.challengeProgress.setColor('white')
       }
+    }
+
+    // Update gem icon for color-match challenges
+    if (this.challengeGemIcon) {
+      this.challengeGemIcon.destroy()
+      this.challengeGemIcon = null
+    }
+
+    if (challenge.type === 'color-match' && challenge.color) {
+      this.challengeGemIcon = this.add.sprite(20, 278, challenge.color)
+        .setDisplaySize(20, 20)
     }
   }
 
