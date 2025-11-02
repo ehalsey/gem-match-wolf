@@ -1484,11 +1484,22 @@ export default class GameScene extends Phaser.Scene {
           this.moveInProgress = true
           this.draggedCell = null
 
+          // Log BEFORE power-up activation
+          console.log('\n🔵 BEFORE POWER-UP TRIGGER:')
+          this.logBoard()
+
           // Trigger the power-up (no swappedWith parameter for click activation)
           this.triggerPowerUp(draggedCell)
+
+          console.log('\n🟡 AFTER POWER-UP TRIGGER (before destroy/fall/refill):')
+          this.logBoard()
+
           await this.destroyCells()
           await this.makeCellsFall()
           await this.refillBoard()
+
+          console.log('\n🟢 AFTER DESTROY/FALL/REFILL:')
+          this.logBoard()
 
           // Decrement moves for using the power-up
           this.decrementMoves()
@@ -1557,6 +1568,10 @@ export default class GameScene extends Phaser.Scene {
         const hasPowerUp = firstCell.powerup || secondCell.powerup
         if (hasPowerUp) {
           console.log('=== POWER-UP SWAPPED (via drag)! ===')
+
+          console.log('\n🔵 BEFORE POWER-UP TRIGGER (swap):')
+          this.logBoard()
+
           if (firstCell.powerup) {
             console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
             this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
@@ -1565,9 +1580,16 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
             this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
           }
+
+          console.log('\n🟡 AFTER POWER-UP TRIGGER (swap, before destroy/fall/refill):')
+          this.logBoard()
+
           await this.destroyCells()
           await this.makeCellsFall()
           await this.refillBoard()
+
+          console.log('\n🟢 AFTER DESTROY/FALL/REFILL (swap):')
+          this.logBoard()
         }
 
         const shouldExplode = MatchDetector.boardShouldExplode(this.board)
@@ -1954,7 +1976,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   logBoard () {
+    console.log('========================================')
     console.log('[DEBUG] Current Board State:')
+    console.log('========================================')
     for (let row = 0; row < size; row++) {
       const rowData = []
       for (let col = 0; col < size; col++) {
@@ -1969,6 +1993,29 @@ export default class GameScene extends Phaser.Scene {
       }
       console.log(`Row ${row}: ${rowData.join(' | ')}`)
     }
+
+    // Check for sprite inconsistencies (ghost gems)
+    console.log('\n[DEBUG] Sprite Check:')
+    let ghostCount = 0
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (cell.empty && cell.sprite && cell.sprite.active) {
+          console.warn(`  ⚠️  GHOST: Empty cell [${row},${col}] has active sprite!`)
+          ghostCount++
+        }
+        if (!cell.empty && (!cell.sprite || !cell.sprite.active)) {
+          console.warn(`  ⚠️  MISSING: Non-empty cell [${row},${col}] (${cell.color}) has no active sprite!`)
+          ghostCount++
+        }
+      }
+    }
+    if (ghostCount === 0) {
+      console.log('  ✓ No sprite inconsistencies detected')
+    } else {
+      console.error(`  ✗ Found ${ghostCount} sprite inconsistencies!`)
+    }
+    console.log('========================================\n')
   }
 }
 
