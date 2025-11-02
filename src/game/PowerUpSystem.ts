@@ -23,6 +23,7 @@ export class PowerUpSystem {
    * Returns patterns with priority for resolution
    */
   detectSpecialPatterns (board: Cell[][], swapContext?: { from: Position, to: Position }): Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> {
+    console.log('[PATTERN DETECTION] Starting special pattern detection', swapContext ? `with swap context: [${swapContext.from.row},${swapContext.from.column}] → [${swapContext.to.row},${swapContext.to.column}]` : 'without swap context')
     const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> = []
 
     // Detect 3x2 and 2x3 rectangles for TNT (Priority: 3)
@@ -77,16 +78,24 @@ export class PowerUpSystem {
 
         const squareCells = [topLeft, topRight, bottomLeft, bottomRight]
 
+        // Debug logging for 2x2 detection
+        const allNotEmpty = !topLeft.empty && !topRight.empty && !bottomLeft.empty && !bottomRight.empty
+        const noPowerups = !topLeft.powerup && !topRight.powerup && !bottomLeft.powerup && !bottomRight.powerup
+        const colorsMatch = topLeft.color === topRight.color && topLeft.color === bottomLeft.color && topLeft.color === bottomRight.color
+
+        if (allNotEmpty && noPowerups) {
+          console.log(`[2x2 CHECK] Checking square at [${row},${col}]:`, {
+            topLeft: `${topLeft.color} [${topLeft.row},${topLeft.column}]`,
+            topRight: `${topRight.color} [${topRight.row},${topRight.column}]`,
+            bottomLeft: `${bottomLeft.color} [${bottomLeft.row},${bottomLeft.column}]`,
+            bottomRight: `${bottomRight.color} [${bottomRight.row},${bottomRight.column}]`,
+            colorsMatch
+          })
+        }
+
         // Check if all 4 cells match and aren't empty or power-ups
-        if (
-          !topLeft.empty && !topLeft.powerup &&
-          !topRight.empty && !topRight.powerup &&
-          !bottomLeft.empty && !bottomLeft.powerup &&
-          !bottomRight.empty && !bottomRight.powerup &&
-          topLeft.color === topRight.color &&
-          topLeft.color === bottomLeft.color &&
-          topLeft.color === bottomRight.color
-        ) {
+        if (allNotEmpty && noPowerups && colorsMatch) {
+          console.log(`[2x2 FOUND] ✓ 2x2 square detected at [${row},${col}] with color ${topLeft.color}!`)
           // Found a 2x2 square! Position fly-away based on swap direction
           let flyAwayCell = topLeft // default to top-left
 
@@ -192,6 +201,7 @@ export class PowerUpSystem {
       }
     }
 
+    console.log(`[PATTERN DETECTION] Found ${patterns.length} special patterns:`, patterns.map(p => `${p.type} at [${p.cell.row},${p.cell.column}]`))
     return patterns
   }
 
