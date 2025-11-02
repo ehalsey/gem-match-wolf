@@ -1817,9 +1817,9 @@ export default class GameScene extends Phaser.Scene {
       // Fly-away test from LEFT: swap blue [1,0] with red [1,1] (swap FROM left cell TO right)
       // Pattern: [0,0]=red [0,1]=red [1,0]=blue [1,1]=red → swap to complete 2x2
       'square-left': [
-        ['red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'green'],
-        ['blue', 'red', 'yellow', 'pink', 'yellow', 'green', 'pink', 'yellow'],
-        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['red', 'red', 'green', 'yellow', 'green', 'yellow', 'blue', 'green'],
+        ['blue', 'red', 'yellow', 'green', 'yellow', 'green', 'green', 'yellow'],
+        ['red', 'green', 'yellow', 'blue', 'red', 'green', 'yellow', 'green'],
         ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
         ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
         ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
