@@ -70,8 +70,8 @@ export default class MenuScene extends Phaser.Scene {
     Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, -60)
     Phaser.Display.Align.In.TopCenter(this.movesLabel, this.zone, 0, -120)
     Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, -160)
-    Phaser.Display.Align.In.TopCenter(this.newGameButton, this.zone, 0, -250)
-    Phaser.Display.Align.In.TopCenter(leaderboardButton, this.zone, 0, -320)
+    Phaser.Display.Align.In.TopCenter(this.newGameButton, this.zone, 0, -205)
+    Phaser.Display.Align.In.TopCenter(leaderboardButton, this.zone, 0, -245)
 
     // Score comparison widget
     this.scoreComparisonWidget = new ScoreComparisonWidget(this, 10, 280, MENU_WIDTH - 20)
