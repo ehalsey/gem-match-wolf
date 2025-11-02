@@ -1691,13 +1691,49 @@ export default class GameScene extends Phaser.Scene {
       const targetCell = this.board[targetRow][targetCol]
       console.log(`Target cell: ${targetCell.color} at [${targetCell.row}, ${targetCell.column}]`)
 
-      // If it's the same cell, just snap back
+      // If it's the same cell, check if it's a power-up and activate it
       if (targetCell === draggedCell) {
-        console.log('Same cell - snapping back')
-        gameObject.x = this.dragStartX
-        gameObject.y = this.dragStartY
-        this.draggedCell = null
-        this.updateDebugDisplay()
+        console.log('Same cell - checking for power-up activation')
+
+        if (draggedCell.powerup) {
+          // Activate the power-up without swapping
+          console.log(`=== POWER-UP ACTIVATED (click) ===`)
+          console.log(`Activating ${draggedCell.powerup} at [${draggedCell.row}, ${draggedCell.column}]`)
+
+          this.moveInProgress = true
+          this.draggedCell = null
+
+          // Trigger the power-up (no swappedWith parameter for click activation)
+          this.triggerPowerUp(draggedCell)
+          await this.destroyCells()
+          await this.makeCellsFall()
+          await this.refillBoard()
+
+          // Decrement moves for using the power-up
+          this.decrementMoves()
+
+          // Continue game loop for cascades
+          let cascades = 0
+          while (this.boardShouldExplode()) {
+            const chains = this.getExplodingChains()
+            this.createPowerUpsFromChains(chains, null)
+            this.showFloatingScores(chains, cascades)
+            await this.destroyCells()
+            await this.makeCellsFall()
+            await this.refillBoard()
+            cascades++
+          }
+
+          this.moveInProgress = false
+          this.updateDebugDisplay()
+        } else {
+          // Not a power-up, just snap back
+          console.log('Not a power-up - snapping back')
+          gameObject.x = this.dragStartX
+          gameObject.y = this.dragStartY
+          this.draggedCell = null
+          this.updateDebugDisplay()
+        }
         return
       }
 
