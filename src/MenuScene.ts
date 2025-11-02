@@ -10,7 +10,6 @@ const MENU_HEIGHT = BOARD_SIZE
 export default class MenuScene extends Phaser.Scene {
   zone: Phaser.GameObjects.Zone
   levelLabel: Phaser.GameObjects.Text
-  difficultyLabel: Phaser.GameObjects.Text
   scoreLabel: Phaser.GameObjects.Text
   scoreValue: Phaser.GameObjects.Text
   movesLabel: Phaser.GameObjects.Text
@@ -33,55 +32,54 @@ export default class MenuScene extends Phaser.Scene {
     // Get current level config
     const levelConfig = LevelSystem.getCurrentLevelConfig()
 
-    // Level and difficulty display
-    this.levelLabel = this.add.text(0, 0, `Level ${levelConfig.level}`)
-      .setFontFamily('Arial')
-      .setFontSize(18)
-      .setColor('#FFD700')
-      .setAlign('center')
-      .setFontStyle('bold')
-
+    // Level display - color-coded by difficulty
     const difficultyColors = {
       easy: '#00FF00',
       medium: '#FFA500',
       hard: '#FF4444'
     }
 
-    this.difficultyLabel = this.add.text(0, 22, levelConfig.difficulty.toUpperCase())
+    this.levelLabel = this.add.text(15, 15, `Level ${levelConfig.level}`)
       .setFontFamily('Arial')
-      .setFontSize(14)
+      .setFontSize(18)
       .setColor(difficultyColors[levelConfig.difficulty])
-      .setAlign('center')
+      .setAlign('left')
+      .setFontStyle('bold')
+      .setOrigin(0, 0)
 
-    // Score display
-    this.scoreLabel = this.add.text(0, 0, 'Score')
+    // Score display - left-aligned with smaller text
+    this.scoreLabel = this.add.text(15, 45, 'Score')
       .setFontFamily('Arial')
-      .setFontSize(22)
+      .setFontSize(16)
       .setColor('#FFD700')
-      .setAlign('center')
+      .setAlign('left')
       .setFontStyle('bold')
+      .setOrigin(0, 0)
 
-    this.scoreValue = this.add.text(0, 35, '0')
+    this.scoreValue = this.add.text(15, 65, '0')
       .setFontFamily('Arial')
-      .setFontSize(28)
+      .setFontSize(20)
       .setColor('white')
-      .setAlign('center')
+      .setAlign('left')
       .setFontStyle('bold')
+      .setOrigin(0, 0)
 
-    // Moves display
-    this.movesLabel = this.add.text(0, 0, 'Moves')
+    // Moves display - left-aligned with smaller text
+    this.movesLabel = this.add.text(15, 95, 'Moves')
       .setFontFamily('Arial')
-      .setFontSize(22)
+      .setFontSize(16)
       .setColor('#FFD700')
-      .setAlign('center')
+      .setAlign('left')
       .setFontStyle('bold')
+      .setOrigin(0, 0)
 
-    this.movesValue = this.add.text(0, 35, levelConfig.moves.toString())
+    this.movesValue = this.add.text(15, 115, levelConfig.moves.toString())
       .setFontFamily('Arial')
-      .setFontSize(28)
+      .setFontSize(20)
       .setColor('white')
-      .setAlign('center')
+      .setAlign('left')
       .setFontStyle('bold')
+      .setOrigin(0, 0)
 
     this.newGameButton = new TextButton(this, 0, 150, 'New Game')
     this.newGameButton.on('pointerup', () => {
@@ -107,22 +105,19 @@ export default class MenuScene extends Phaser.Scene {
       .setWordWrapWidth(MENU_WIDTH - 30)
 
     this.zone = this.add.zone(0, 0, MENU_WIDTH, MENU_HEIGHT).setOrigin(0)
-    Phaser.Display.Align.In.TopCenter(this.levelLabel, this.zone, 0, 60)
-    Phaser.Display.Align.In.TopCenter(this.difficultyLabel, this.zone, 0, 82)
-    Phaser.Display.Align.In.TopCenter(this.scoreLabel, this.zone, 0, 120)
-    Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, 150)
-    Phaser.Display.Align.In.TopCenter(this.movesLabel, this.zone, 0, 195)
-    Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, 225)
-    Phaser.Display.Align.In.TopCenter(this.newGameButton, this.zone, 0, 270)
-    Phaser.Display.Align.In.TopCenter(leaderboardButton, this.zone, 0, 310)
+
+    // Position buttons centered
+    const centerX = MENU_WIDTH / 2
+    this.newGameButton.setPosition(centerX, 145)
+    leaderboardButton.setPosition(centerX, 185)
 
     // Score comparison widget (below buttons)
-    this.scoreComparisonWidget = new ScoreComparisonWidget(this, 15, 350, MENU_WIDTH - 30)
+    this.scoreComparisonWidget = new ScoreComparisonWidget(this, 15, 225, MENU_WIDTH - 30)
     this.scoreComparisonWidget.update(0)
 
     // Position challenge display at bottom (with margin from bottom)
-    this.challengeLabel.setPosition(15, 460)
-    this.challengeProgress.setPosition(15, 480)
+    this.challengeLabel.setPosition(15, 380)
+    this.challengeProgress.setPosition(15, 400)
 
     // TODO: hint button
 
@@ -158,7 +153,6 @@ export default class MenuScene extends Phaser.Scene {
   updateData (parent: any, key: string, data: any, previousData: any) {
     if (key === 'score') {
       this.scoreValue.setText(data)
-      Phaser.Display.Align.In.TopCenter(this.scoreValue, this.zone, 0, 150)
       // Update score comparison widget
       if (this.scoreComparisonWidget) {
         this.scoreComparisonWidget.update(data)
@@ -173,7 +167,6 @@ export default class MenuScene extends Phaser.Scene {
       } else {
         this.movesValue.setColor('white')
       }
-      Phaser.Display.Align.In.TopCenter(this.movesValue, this.zone, 0, 225)
     }
   }
 }
