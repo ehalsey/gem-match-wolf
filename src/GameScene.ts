@@ -111,7 +111,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.loadTestBoard(name)')
       console.log('  - gameDebug.logBoard()')
       console.log('  - gameDebug.getWinningMoves()')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, rect3x2, rect2x3, square, square-left, tnt-test')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, rect3x2, rect2x3, square, square-left, tnt-test, double-flyaway')
     }
 
     this.createBackground()
@@ -1777,6 +1777,49 @@ export default class GameScene extends Phaser.Scene {
       this.spawnPowerup('tnt', 4, 4)
       console.log(`[DEBUG] Loaded ${name} with TNT at center [4, 4]`)
       console.log('[DEBUG] Click the TNT to test blast radius (should destroy 2 cells in each direction)')
+      return
+    }
+
+    if (name === 'double-flyaway') {
+      // Load a simple test board for double fly-away testing
+      const doubleFlyawayBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = doubleFlyawayBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn 2 fly-away power-ups next to each other
+      this.spawnPowerup('fly-away', 4, 3)
+      this.spawnPowerup('fly-away', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with 2 fly-away power-ups at [4,3] and [4,4]`)
+      console.log('[DEBUG] Click one to activate and test interaction between adjacent fly-aways')
       return
     }
 
