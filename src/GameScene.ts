@@ -13,7 +13,6 @@ import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
 const gems = [
   'blue',
   'green',
-  'orange',
   'red',
   'pink',
   'yellow'
@@ -1635,7 +1634,6 @@ export default class GameScene extends Phaser.Scene {
     const colorMap: { [key: string]: number } = {
       blue: 0x4da6ff,
       green: 0x4dff4d,
-      orange: 0xffaa4d,
       red: 0xff4d4d,
       pink: 0xff66ff,
       yellow: 0xffff4d
