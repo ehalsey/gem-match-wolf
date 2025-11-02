@@ -1929,7 +1929,7 @@ export default class GameScene extends Phaser.Scene {
       // Pattern: [0,0]=red [0,1]=red [1,0]=red [1,1]=blue → swap to complete 2x2
       square: [
         ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['red', 'blue', 'orange', 'white', 'yellow', 'green', 'white', 'yellow'],
+        ['red', 'blue', 'red', 'white', 'yellow', 'green', 'orange', 'yellow'],
         ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
         ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
         ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
