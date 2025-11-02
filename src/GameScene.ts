@@ -1492,6 +1492,13 @@ export default class GameScene extends Phaser.Scene {
       cell.empty = true
       cell.markedForDestruction = false
 
+      // If sprite is already destroyed (e.g., by markCellForDestructionImmediate),
+      // just resolve immediately
+      if (!cell.sprite) {
+        resolve()
+        return
+      }
+
       // Create particle explosion
       this.createGemParticles(cell)
 
