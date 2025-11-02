@@ -80,6 +80,9 @@ export class PowerUpSystem {
         // Check if all 4 cells match and aren't empty or power-ups
         if (
           !topLeft.empty && !topLeft.powerup &&
+          !topRight.empty && !topRight.powerup &&
+          !bottomLeft.empty && !bottomLeft.powerup &&
+          !bottomRight.empty && !bottomRight.powerup &&
           topLeft.color === topRight.color &&
           topLeft.color === bottomLeft.color &&
           topLeft.color === bottomRight.color
@@ -349,7 +352,7 @@ export class PowerUpSystem {
       color = 0xFFFF00  // Yellow for other power-ups
     }
 
-    this.scene.add.particles(x, y, 'blue', {
+    const particles = this.scene.add.particles(x, y, 'blue', {
       speed: { min: 100, max: 200 },
       scale: { start: 0.3, end: 0 },
       blendMode: 'ADD',
@@ -357,6 +360,9 @@ export class PowerUpSystem {
       tint: color,
       quantity: 15
     })
+
+    // Auto-destroy after particles fade
+    this.scene.time.delayedCall(500, () => particles.destroy())
   }
 
   /**
