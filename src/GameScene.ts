@@ -520,15 +520,27 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  detectSpecialPatterns (swapContext?: { from: Position, to: Position }): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
-    const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> = []
-    const usedCells = new Set<Cell>()
+  /**
+   * Power-up Priority System:
+   * When multiple patterns overlap (share cells), only the highest priority power-up is created.
+   *
+   * Priority levels (highest to lowest):
+   * 4 - Color Bomb (light-ball): 5+ linear match - most powerful, clears all gems of target color
+   * 3 - TNT: L-shapes and rectangles (3x2, 2x3) - area damage in 2-cell radius
+   * 2 - Fly-away: 2x2 squares - flies to random gem and explodes
+   * 1 - Rockets: 4-match linear (horizontal/vertical) - clears entire row or column
+   *
+   * This ensures that more powerful combos take precedence when patterns overlap.
+   */
 
-    // Detect 3x2 and 2x3 rectangles for TNT (check before 2x2 squares since they're larger)
+  detectSpecialPatterns (swapContext?: { from: Position, to: Position }): Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> {
+    const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> = []
+
+    // Detect 3x2 and 2x3 rectangles for TNT (Priority: 3)
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const topLeft = this.board[row][col]
-        if (topLeft.empty || topLeft.powerup || usedCells.has(topLeft)) continue
+        if (topLeft.empty || topLeft.powerup) continue
 
         // 3x2 horizontal rectangle (3 columns, 2 rows)
         if (col <= size - 3 && row <= size - 2) {
@@ -541,12 +553,9 @@ export default class GameScene extends Phaser.Scene {
             this.board[row + 1][col + 2]
           ]
 
-          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color) &&
-              cells.every(c => !usedCells.has(c))) {
+          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color)) {
             // Place power-up in center of rectangle (middle of top row)
-            patterns.push({ cell: this.board[row][col + 1], type: 'tnt', cells })
-            cells.forEach(cell => usedCells.add(cell))
-            continue
+            patterns.push({ cell: this.board[row][col + 1], type: 'tnt', cells, priority: 3 })
           }
         }
 
@@ -561,18 +570,15 @@ export default class GameScene extends Phaser.Scene {
             this.board[row + 2][col + 1]
           ]
 
-          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color) &&
-              cells.every(c => !usedCells.has(c))) {
+          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color)) {
             // Place power-up in center of rectangle (middle row, left column)
-            patterns.push({ cell: this.board[row + 1][col], type: 'tnt', cells })
-            cells.forEach(cell => usedCells.add(cell))
-            continue
+            patterns.push({ cell: this.board[row + 1][col], type: 'tnt', cells, priority: 3 })
           }
         }
       }
     }
 
-    // Detect 2x2 squares for Fly Away
+    // Detect 2x2 squares for Fly Away (Priority: 2)
     for (let row = 0; row < size - 1; row++) {
       for (let col = 0; col < size - 1; col++) {
         const topLeft = this.board[row][col]
@@ -581,7 +587,6 @@ export default class GameScene extends Phaser.Scene {
         const bottomRight = this.board[row + 1][col + 1]
 
         const squareCells = [topLeft, topRight, bottomLeft, bottomRight]
-        if (squareCells.some(cell => usedCells.has(cell))) continue
 
         // Check if all 4 cells match and aren't empty or power-ups
         if (
@@ -628,18 +633,18 @@ export default class GameScene extends Phaser.Scene {
           patterns.push({
             cell: flyAwayCell,
             type: 'fly-away',
-            cells: squareCells
+            cells: squareCells,
+            priority: 2
           })
-          squareCells.forEach(cell => usedCells.add(cell))
         }
       }
     }
 
-    // Detect L-shapes for TNT (all 4 orientations)
+    // Detect L-shapes for TNT (all 4 orientations) (Priority: 3)
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const center = this.board[row][col]
-        if (center.empty || center.powerup || usedCells.has(center)) continue
+        if (center.empty || center.powerup) continue
 
         // L-shape 1: └ (right and up)
         if (col <= size - 3 && row >= 2) {
@@ -649,11 +654,8 @@ export default class GameScene extends Phaser.Scene {
           const up2 = this.board[row - 2][col]
           const lCells = [center, right1, right2, up1, up2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
-              lCells.every(c => !usedCells.has(c))) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells })
-            lCells.forEach(cell => usedCells.add(cell))
-            continue
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }
 
@@ -665,11 +667,8 @@ export default class GameScene extends Phaser.Scene {
           const up2 = this.board[row - 2][col]
           const lCells = [center, left1, left2, up1, up2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
-              lCells.every(c => !usedCells.has(c))) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells })
-            lCells.forEach(cell => usedCells.add(cell))
-            continue
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }
 
@@ -681,11 +680,8 @@ export default class GameScene extends Phaser.Scene {
           const down2 = this.board[row + 2][col]
           const lCells = [center, right1, right2, down1, down2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
-              lCells.every(c => !usedCells.has(c))) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells })
-            lCells.forEach(cell => usedCells.add(cell))
-            continue
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }
 
@@ -697,11 +693,8 @@ export default class GameScene extends Phaser.Scene {
           const down2 = this.board[row + 2][col]
           const lCells = [center, left1, left2, down1, down2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color) &&
-              lCells.every(c => !usedCells.has(c))) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells })
-            lCells.forEach(cell => usedCells.add(cell))
-            continue
+          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }
       }
@@ -710,20 +703,94 @@ export default class GameScene extends Phaser.Scene {
     return patterns
   }
 
+  /**
+   * Resolves overlapping patterns by keeping only the highest priority power-ups.
+   * When patterns share cells, only the one with the highest priority is kept.
+   */
+  resolvePowerUpPriorities (allPatterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }>): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
+    if (allPatterns.length === 0) return []
+
+    // Sort patterns by priority (highest first)
+    const sortedPatterns = [...allPatterns].sort((a, b) => b.priority - a.priority)
+
+    const finalPatterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> = []
+    const usedCells = new Set<Cell>()
+
+    for (const pattern of sortedPatterns) {
+      // Check if any cells in this pattern have already been used by a higher priority pattern
+      const hasOverlap = pattern.cells.some(cell => usedCells.has(cell))
+
+      if (!hasOverlap) {
+        // No overlap, keep this pattern
+        finalPatterns.push({
+          cell: pattern.cell,
+          type: pattern.type,
+          cells: pattern.cells
+        })
+
+        // Mark all cells in this pattern as used
+        pattern.cells.forEach(cell => usedCells.add(cell))
+      }
+    }
+
+    return finalPatterns
+  }
+
   createPowerUpsFromChains (chains: Cell[][], swapContext?: { from: Position, to: Position } | null) {
     let powerUpsCreated = false
 
-    // First, check for special patterns (L-shapes and 2x2 squares)
-    const specialPatterns = this.detectSpecialPatterns(swapContext)
+    // Collect ALL potential patterns with priorities
+    const allPatterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> = []
 
-    if (this.debugMode && specialPatterns.length > 0) {
-      console.log(`[DEBUG] Detected ${specialPatterns.length} special pattern(s)`)
-      specialPatterns.forEach((p, i) => {
-        console.log(`  Pattern ${i + 1}: ${p.type} at [${p.cell.row}, ${p.cell.column}]`)
+    // 1. Detect special patterns (rectangles, L-shapes, squares)
+    const specialPatterns = this.detectSpecialPatterns(swapContext)
+    allPatterns.push(...specialPatterns)
+
+    // 2. Detect linear chain patterns (4+ matches)
+    for (const chain of chains) {
+      if (chain.length >= 4) {
+        // Determine if chain is horizontal or vertical
+        const isHorizontal = chain[0].row === chain[1].row
+
+        // Choose the middle cell for the power-up
+        const middleIndex = Math.floor(chain.length / 2)
+        const powerUpCell = chain[middleIndex]
+
+        // Determine power-up type and priority based on chain length
+        let powerUpType: PowerUpType
+        let priority: number
+        if (chain.length >= 5) {
+          powerUpType = 'light-ball'  // 5+ match → color bomb (highest priority)
+          priority = 4
+        } else if (isHorizontal) {
+          powerUpType = 'horizontal-rocket'  // 4 horizontal → horizontal rocket
+          priority = 1
+        } else {
+          powerUpType = 'vertical-rocket'  // 4 vertical → vertical rocket
+          priority = 1
+        }
+
+        allPatterns.push({
+          cell: powerUpCell,
+          type: powerUpType,
+          cells: chain,
+          priority
+        })
+      }
+    }
+
+    // 3. Resolve conflicts - keep only highest priority patterns when they overlap
+    const finalPatterns = this.resolvePowerUpPriorities(allPatterns)
+
+    if (this.debugMode && finalPatterns.length > 0) {
+      console.log(`[DEBUG] Creating ${finalPatterns.length} power-up(s) after priority resolution`)
+      finalPatterns.forEach((p, i) => {
+        console.log(`  Power-up ${i + 1}: ${p.type} at [${p.cell.row}, ${p.cell.column}]`)
       })
     }
 
-    for (const pattern of specialPatterns) {
+    // 4. Create the final power-ups
+    for (const pattern of finalPatterns) {
       powerUpsCreated = true
       const powerUpCell = pattern.cell
       const powerUpType = pattern.type
@@ -737,46 +804,6 @@ export default class GameScene extends Phaser.Scene {
 
       // Create the power-up
       this.createPowerUp(powerUpCell, powerUpType)
-    }
-
-    // Then handle regular linear chains
-    for (const chain of chains) {
-      // Skip chains that are part of special patterns
-      const isPartOfSpecialPattern = specialPatterns.some(pattern =>
-        pattern.cells.some(cell => chain.includes(cell))
-      )
-      if (isPartOfSpecialPattern) continue
-
-      if (chain.length >= 4) {
-        powerUpsCreated = true
-
-        // Determine if chain is horizontal or vertical
-        const isHorizontal = chain[0].row === chain[1].row
-
-        // Choose the middle cell for the power-up
-        const middleIndex = Math.floor(chain.length / 2)
-        const powerUpCell = chain[middleIndex]
-
-        // Determine power-up type based on chain length and orientation
-        let powerUpType: PowerUpType
-        if (chain.length >= 5) {
-          powerUpType = 'light-ball'  // 5+ match → color bomb
-        } else if (isHorizontal) {
-          powerUpType = 'horizontal-rocket'  // 4 horizontal → horizontal rocket
-        } else {
-          powerUpType = 'vertical-rocket'  // 4 vertical → vertical rocket
-        }
-
-        // Mark ALL cells in chain (except the power-up) for destruction
-        for (let i = 0; i < chain.length; i++) {
-          if (i !== middleIndex) {
-            chain[i].empty = true
-          }
-        }
-
-        // Create the power-up
-        this.createPowerUp(powerUpCell, powerUpType)
-      }
     }
 
     // Play booster creation sound if any power-ups were created
