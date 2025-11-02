@@ -206,6 +206,14 @@ export class PowerUpSystem {
   }
 
   /**
+   * Check if the board has any special patterns (2x2, L-shapes, rectangles)
+   * Used for swap validation - a move is valid if it creates special patterns
+   */
+  hasSpecialPatterns (board: Cell[][], swapContext?: { from: Position, to: Position }): boolean {
+    return this.detectSpecialPatterns(board, swapContext).length > 0
+  }
+
+  /**
    * Resolve power-up priority conflicts
    * When multiple patterns overlap, choose the highest priority pattern
    */

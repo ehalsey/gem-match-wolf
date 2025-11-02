@@ -1571,14 +1571,43 @@ export default class GameScene extends Phaser.Scene {
         }
 
         const shouldExplode = MatchDetector.boardShouldExplode(this.board)
-        console.log(`Board should explode: ${shouldExplode}, has power-up: ${hasPowerUp}`)
+        const hasSpecialPatterns = this.powerUpSystem.hasSpecialPatterns(this.board, this.lastSwap)
+        console.log(`Board should explode: ${shouldExplode}, has power-up: ${hasPowerUp}, has special patterns: ${hasSpecialPatterns}`)
 
-        if (shouldExplode || hasPowerUp) {
+        if (shouldExplode || hasPowerUp || hasSpecialPatterns) {
           // Valid move - decrement moves counter
           console.log('Valid move! Processing...')
           this.decrementMoves()
 
           let cascades = 0
+
+          // First, handle special patterns if they exist but no regular matches
+          if (hasSpecialPatterns && !shouldExplode) {
+            console.log('Processing special patterns without regular matches')
+            const patterns = this.powerUpSystem.detectSpecialPatterns(this.board, this.lastSwap)
+
+            // Create synthetic chains from pattern cells
+            const syntheticChains = patterns.map(p => p.cells)
+
+            // Track challenge progress for matched gems
+            this.updateChallengeForMatches(syntheticChains)
+
+            // Create power-ups from the special patterns
+            this.powerUpSystem.createPowerUpsFromChains(
+              this.board,
+              syntheticChains,
+              (type) => this.updateChallengeForPowerUp(type),
+              this.lastSwap
+            )
+
+            this.showFloatingScores(syntheticChains, cascades)
+            await this.destroyCells()
+            await this.makeCellsFall()
+            await this.refillBoard()
+            cascades++
+          }
+
+          // Then continue with regular cascade loop for any subsequent matches
           while (MatchDetector.boardShouldExplode(this.board)) {
             const chains = MatchDetector.getExplodingChains(this.board)
 
@@ -1712,14 +1741,14 @@ export default class GameScene extends Phaser.Scene {
     if (name === 'tnt-test' || name === 'bomb-test') {
       // Load a simple test board for TNT
       const tntTestBoard = [
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ]
 
       // Load the board
@@ -1755,87 +1784,87 @@ export default class GameScene extends Phaser.Scene {
     const testBoards: { [key: string]: string[][] } = {
       match5: [
         ['blue', 'blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'green', 'yellow', 'pink', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'blue', 'red', 'green', 'yellow', 'pink', 'blue'],
+        ['green', 'yellow', 'pink', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'blue', 'red', 'green', 'yellow', 'pink', 'blue', 'red'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'blue', 'red', 'green'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'blue', 'red', 'green'],
+        ['red', 'green', 'yellow', 'pink', 'blue', 'red', 'green', 'yellow']
       ],
       lshape: [
-        ['red', 'red', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'green', 'red', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'red', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'green', 'red', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['yellow', 'pink', 'red', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       // Fly-away test from RIGHT: swap blue [1,1] with red [1,0] (swap FROM right cell TO left)
       // Pattern: [0,0]=red [0,1]=red [1,0]=red [1,1]=blue → swap to complete 2x2
       square: [
-        ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['red', 'blue', 'red', 'white', 'yellow', 'green', 'orange', 'yellow'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'green'],
+        ['red', 'blue', 'red', 'pink', 'yellow', 'green', 'yellow', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       // Fly-away test from LEFT: swap blue [1,0] with red [1,1] (swap FROM left cell TO right)
       // Pattern: [0,0]=red [0,1]=red [1,0]=blue [1,1]=red → swap to complete 2x2
       'square-left': [
-        ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['blue', 'red', 'orange', 'white', 'yellow', 'green', 'white', 'yellow'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'green'],
+        ['blue', 'red', 'yellow', 'pink', 'yellow', 'green', 'pink', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       match4h: [
-        ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       match4v: [
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['red', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['red', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['white', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['blue', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow']
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['red', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['red', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['red', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['pink', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['yellow', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['blue', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['yellow', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow']
       ],
       rect3x2: [
-        ['red', 'red', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['red', 'red', 'red', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['red', 'red', 'red', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       rect2x3: [
-        ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['red', 'red', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'red', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'green'],
+        ['red', 'red', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['red', 'red', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ]
     }
 
@@ -1845,6 +1874,8 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const boardConfig = testBoards[name]
+    console.log(`[DEBUG] Loading ${name} with ${boardConfig.length} rows`)
+
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const cell = this.board[row][col]
@@ -1863,6 +1894,12 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          // Check if texture exists
+          if (!this.textures.exists(cell.color)) {
+            console.error(`[DEBUG] Texture '${cell.color}' does not exist at [${row},${col}]!`)
+          }
+
           cell.sprite = this.add.sprite(x, y, cell.color)
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
