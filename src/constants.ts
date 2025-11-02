@@ -1,4 +1,4 @@
-const MENU_WIDTH = 140
+const MENU_WIDTH = 200
 
 const CELL_SIZE = 65
 const NUMBER_OF_CELLS_PER_ROW = 8
