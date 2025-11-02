@@ -357,7 +357,7 @@ export class PowerUpSystem {
   }
 
   /**
-   * Create visual burst effect when power-up is created
+   * Create visual sparkle/shimmer effect when power-up is created
    */
   createPowerUpBurst (x: number, y: number, powerUpType: PowerUpType) {
     let color: number
@@ -371,16 +371,18 @@ export class PowerUpSystem {
     }
 
     const particles = this.scene.add.particles(x, y, 'blue', {
-      speed: { min: 100, max: 200 },
-      scale: { start: 0.3, end: 0 },
+      speed: { min: 50, max: 150 },
+      scale: { start: 0.15, end: 0 },
+      alpha: { start: 1, end: 0 },
       blendMode: 'ADD',
-      lifespan: 400,
+      lifespan: 500,
       tint: color,
-      quantity: 15
+      quantity: 25,
+      gravityY: -50  // Slight upward float
     })
 
     // Auto-destroy after particles fade
-    this.scene.time.delayedCall(500, () => particles.destroy())
+    this.scene.time.delayedCall(600, () => particles.destroy())
   }
 
   /**
