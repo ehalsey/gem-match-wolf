@@ -341,8 +341,10 @@ export class PowerUpSystem {
     const x = powerUpCell.column * CELL_SIZE + CELL_SIZE / 2
     const y = powerUpCell.row * CELL_SIZE + CELL_SIZE / 2
 
-    // Destroy old sprite
-    powerUpCell.sprite.destroy()
+    // Destroy old sprite if it exists
+    if (powerUpCell.sprite) {
+      powerUpCell.sprite.destroy()
+    }
 
     // Create new power-up sprite
     powerUpCell.sprite = this.scene.add.sprite(x, y, powerUpType)
