@@ -9,6 +9,7 @@ export interface Cell {
   sprite: Phaser.GameObjects.Sprite
   empty: boolean
   powerup: PowerUpType
+  markedForDestruction?: boolean
 }
 
 export interface Position {

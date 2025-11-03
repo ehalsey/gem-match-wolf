@@ -10,6 +10,7 @@ import { ConfirmPopup } from './ConfirmPopup'
 import { ScoreStorageService } from './ScoreStorageService'
 import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
 import { MatchDetector } from './game/MatchDetector'
+import { PowerUpSystem } from './game/PowerUpSystem'
 import { type Cell, type PowerUpType, type Position } from './types'
 
 const gems = [
@@ -46,6 +47,12 @@ export default class GameScene extends Phaser.Scene {
   lastSwap: { from: Position, to: Position } | null
   currentChallenge: Challenge
   levelConfig: LevelConfig
+  powerUpSystem: PowerUpSystem
+  undoSnapshot: {
+    board: Array<{row: number, column: number, color: string | null, powerup: PowerUpType | null, empty: boolean}>,
+    score: number,
+    moves: number
+  } | null
 
   constructor () {
     super({
@@ -109,13 +116,22 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.loadTestBoard(name)')
       console.log('  - gameDebug.logBoard()')
       console.log('  - gameDebug.getWinningMoves()')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape, rect3x2, rect2x3, square, square-left, tnt-test')
+      console.log('  - gameDebug.exportBoard() - Export current board state as JSON')
+      console.log('[DEBUG] Keyboard shortcuts:')
+      console.log('  - U or Z: Undo last move')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, rect3x2, rect2x3, square, square-left, tnt-test, double-flyaway')
     }
 
     this.createBackground()
 
     // Create particle texture
     this.createParticleTexture()
+
+    // Initialize power-up system
+    this.powerUpSystem = new PowerUpSystem(this)
+
+    // Initialize undo snapshot
+    this.undoSnapshot = null
 
     // Create debug graphics layer
     this.debugGraphics = this.add.graphics()
@@ -148,6 +164,10 @@ export default class GameScene extends Phaser.Scene {
     this.input.on('drag', this.onDrag, this)
     this.input.on('dragend', this.onDragEnd, this)
 
+    // Set up keyboard handler for undo
+    this.input.keyboard?.on('keydown-U', this.handleUndo, this)
+    this.input.keyboard?.on('keydown-Z', this.handleUndo, this)
+
     this.registry.events.on('NEW_GAME', () => {
       this.handleStartNewGame()
     })
@@ -166,6 +186,7 @@ export default class GameScene extends Phaser.Scene {
 
   startNewGame () {
     this.isGameOver = false
+    this.undoSnapshot = null
     this.destroyBoard()
     this.initBoard()
 
@@ -236,13 +257,14 @@ export default class GameScene extends Phaser.Scene {
       return
     }
 
-    // Fill board
+    // Fill board using gem types for current level difficulty
+    const levelGems = this.levelConfig ? this.levelConfig.gemTypes : gems
     for (let row = 0; row < size; row++) {
       for (let column = 0; column < size; column++) {
         const cell = this.board[row][column]
 
         const possibleColors = []
-        for (let color of gems) {
+        for (let color of levelGems) {
           cell.color = color
           // Check for both 3+ matches AND 2x2 squares
           if (!MatchDetector.shouldExplode(cell, this.board) && !MatchDetector.wouldCreate2x2Square(cell, this.board)) {
@@ -387,6 +409,95 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Create a snapshot of the current board state for undo
+   */
+  createBoardSnapshot () {
+    this.undoSnapshot = {
+      board: [],
+      score: this.score,
+      moves: this.moves
+    }
+
+    for (let row = 0; row < size; row++) {
+      for (let column = 0; column < size; column++) {
+        const cell = this.board[row][column]
+        this.undoSnapshot.board.push({
+          row: cell.row,
+          column: cell.column,
+          color: cell.color,
+          powerup: cell.powerup,
+          empty: cell.empty
+        })
+      }
+    }
+
+    console.log('[UNDO] Board snapshot created')
+  }
+
+  /**
+   * Restore board from the last snapshot
+   */
+  restoreBoardSnapshot () {
+    if (!this.undoSnapshot) {
+      console.log('[UNDO] No snapshot available to restore')
+      return
+    }
+
+    // Destroy current board sprites
+    for (let row = 0; row < size; row++) {
+      for (let column = 0; column < size; column++) {
+        const cell = this.board[row][column]
+        if (cell.sprite) {
+          cell.sprite.destroy()
+        }
+      }
+    }
+
+    // Restore board state from snapshot
+    for (const cellData of this.undoSnapshot.board) {
+      const cell = this.board[cellData.row][cellData.column]
+      cell.color = cellData.color
+      cell.empty = cellData.empty
+      cell.powerup = cellData.powerup
+
+      // Create sprite if cell is not empty
+      if (!cell.empty) {
+        const x = cellData.column * CELL_SIZE + CELL_SIZE / 2
+        const y = cellData.row * CELL_SIZE + CELL_SIZE / 2
+        const spriteKey = cell.powerup || cell.color
+        cell.sprite = this.add.sprite(x, y, spriteKey!)
+          .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+          .setInteractive({ draggable: true })
+      } else {
+        cell.sprite = null
+      }
+    }
+
+    // Restore score and moves
+    this.setScore(this.undoSnapshot.score)
+    this.setMoves(this.undoSnapshot.moves)
+
+    console.log('[UNDO] Board restored from snapshot')
+  }
+
+  /**
+   * Handle undo keyboard shortcut (U or Z key)
+   */
+  handleUndo () {
+    if (this.moveInProgress) {
+      console.log('[UNDO] Cannot undo while move is in progress')
+      return
+    }
+
+    if (this.isGameOver) {
+      console.log('[UNDO] Cannot undo when game is over')
+      return
+    }
+
+    this.restoreBoardSnapshot()
+  }
+
+  /**
    * Retry current level with a life
    */
   retryLevel () {
@@ -480,12 +591,13 @@ export default class GameScene extends Phaser.Scene {
       await this.refillBoard()
     }
 
-    if (MatchDetector.boardShouldExplode(this.board) || hasPowerUp) {
+    const hasSpecialPatterns = this.powerUpSystem.hasSpecialPatterns(this.board, this.lastSwap)
+    if (MatchDetector.boardShouldExplode(this.board) || hasPowerUp || hasSpecialPatterns) {
       // Valid move - decrement moves counter
       this.decrementMoves()
 
       let cascades = 0
-      while (MatchDetector.boardShouldExplode(this.board)) {
+      while (MatchDetector.boardShouldExplode(this.board) || this.powerUpSystem.hasSpecialPatterns(this.board)) {
         const chains = MatchDetector.getExplodingChains(this.board)
 
         // Track challenge progress for matched gems
@@ -494,9 +606,14 @@ export default class GameScene extends Phaser.Scene {
         console.log('=== BEFORE POWER-UP CREATION ===')
         this.logBoardState()
 
-        // Create power-ups from chains of 4+ gems
+        // Create power-ups from chains of 4+ gems AND special patterns
         // Pass swap context on first cascade, null on subsequent cascades
-        this.createPowerUpsFromChains(chains, cascades === 0 ? this.lastSwap : null)
+        this.powerUpSystem.createPowerUpsFromChains(
+          this.board,
+          chains,
+          (type) => this.updateChallengeForPowerUp(type),
+          cascades === 0 ? this.lastSwap : null
+        )
 
         console.log('=== AFTER POWER-UP CREATION ===')
         this.logBoardState()
@@ -768,348 +885,6 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Power-up Priority System:
-   * When multiple patterns overlap (share cells), only the highest priority power-up is created.
-   *
-   * Priority levels (highest to lowest):
-   * 4 - Color Bomb (light-ball): 5+ linear match - most powerful, clears all gems of target color
-   * 3 - TNT: L-shapes and rectangles (3x2, 2x3) - area damage in 2-cell radius
-   * 2 - Fly-away: 2x2 squares - flies to random gem and explodes
-   * 1 - Rockets: 4-match linear (horizontal/vertical) - clears entire row or column
-   *
-   * This ensures that more powerful combos take precedence when patterns overlap.
-   */
-
-  detectSpecialPatterns (swapContext?: { from: Position, to: Position }): Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> {
-    const patterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> = []
-
-    // Detect 3x2 and 2x3 rectangles for TNT (Priority: 3)
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        const topLeft = this.board[row][col]
-        if (topLeft.empty || topLeft.powerup) continue
-
-        // 3x2 horizontal rectangle (3 columns, 2 rows)
-        if (col <= size - 3 && row <= size - 2) {
-          const cells = [
-            this.board[row][col],
-            this.board[row][col + 1],
-            this.board[row][col + 2],
-            this.board[row + 1][col],
-            this.board[row + 1][col + 1],
-            this.board[row + 1][col + 2]
-          ]
-
-          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color)) {
-            // Place power-up in center of rectangle (middle of top row)
-            patterns.push({ cell: this.board[row][col + 1], type: 'tnt', cells, priority: 3 })
-          }
-        }
-
-        // 2x3 vertical rectangle (2 columns, 3 rows)
-        if (col <= size - 2 && row <= size - 3) {
-          const cells = [
-            this.board[row][col],
-            this.board[row][col + 1],
-            this.board[row + 1][col],
-            this.board[row + 1][col + 1],
-            this.board[row + 2][col],
-            this.board[row + 2][col + 1]
-          ]
-
-          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color)) {
-            // Place power-up in center of rectangle (middle row, left column)
-            patterns.push({ cell: this.board[row + 1][col], type: 'tnt', cells, priority: 3 })
-          }
-        }
-      }
-    }
-
-    // Detect 2x2 squares for Fly Away (Priority: 2)
-    for (let row = 0; row < size - 1; row++) {
-      for (let col = 0; col < size - 1; col++) {
-        const topLeft = this.board[row][col]
-        const topRight = this.board[row][col + 1]
-        const bottomLeft = this.board[row + 1][col]
-        const bottomRight = this.board[row + 1][col + 1]
-
-        const squareCells = [topLeft, topRight, bottomLeft, bottomRight]
-
-        // Check if all 4 cells match and aren't empty or power-ups
-        if (
-          !topLeft.empty && !topLeft.powerup &&
-          topLeft.color === topRight.color &&
-          topLeft.color === bottomLeft.color &&
-          topLeft.color === bottomRight.color
-        ) {
-          // Found a 2x2 square! Position fly-away based on swap direction
-          let flyAwayCell = topLeft // default to top-left
-
-          // If we have swap context, determine direction and position accordingly
-          if (swapContext) {
-            // Check if any of the swap positions falls within the square bounds
-            const squareRowRange = [row, row + 1]
-            const squareColRange = [col, col + 1]
-            const isSwapInSquare = 
-              (squareRowRange.includes(swapContext.from.row) && squareColRange.includes(swapContext.from.column)) ||
-              (squareRowRange.includes(swapContext.to.row) && squareColRange.includes(swapContext.to.column))
-
-            if (isSwapInSquare) {
-              // Determine horizontal direction of swap
-              const swapFromLeft = swapContext.from.column < swapContext.to.column
-              const swapFromRight = swapContext.from.column > swapContext.to.column
-
-              console.log(`[FLY-AWAY] Swap detected: from [${swapContext.from.row}, ${swapContext.from.column}] to [${swapContext.to.row}, ${swapContext.to.column}]`)
-              console.log(`[FLY-AWAY] Direction: ${swapFromRight ? 'RIGHT-TO-LEFT' : swapFromLeft ? 'LEFT-TO-RIGHT' : 'VERTICAL'}`)
-
-              if (swapFromRight) {
-                // Match made from right → position at lower right (bottomRight)
-                flyAwayCell = bottomRight
-                console.log(`[FLY-AWAY] Positioning at bottom-right [${bottomRight.row}, ${bottomRight.column}]`)
-              } else if (swapFromLeft) {
-                // Match made from left → position at lower left (bottomLeft)
-                flyAwayCell = bottomLeft
-                console.log(`[FLY-AWAY] Positioning at bottom-left [${bottomLeft.row}, ${bottomLeft.column}]`)
-              } else {
-                console.log(`[FLY-AWAY] Positioning at default top-left [${topLeft.row}, ${topLeft.column}]`)
-              }
-              // Note: vertical swaps default to topLeft (original behavior)
-            }
-          }
-
-          patterns.push({
-            cell: flyAwayCell,
-            type: 'fly-away',
-            cells: squareCells,
-            priority: 2
-          })
-        }
-      }
-    }
-
-    // Detect L-shapes for TNT (all 4 orientations) (Priority: 3)
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        const center = this.board[row][col]
-        if (center.empty || center.powerup) continue
-
-        // L-shape 1: └ (right and up)
-        if (col <= size - 3 && row >= 2) {
-          const right1 = this.board[row][col + 1]
-          const right2 = this.board[row][col + 2]
-          const up1 = this.board[row - 1][col]
-          const up2 = this.board[row - 2][col]
-          const lCells = [center, right1, right2, up1, up2]
-
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
-          }
-        }
-
-        // L-shape 2: ┘ (left and up)
-        if (col >= 2 && row >= 2) {
-          const left1 = this.board[row][col - 1]
-          const left2 = this.board[row][col - 2]
-          const up1 = this.board[row - 1][col]
-          const up2 = this.board[row - 2][col]
-          const lCells = [center, left1, left2, up1, up2]
-
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
-          }
-        }
-
-        // L-shape 3: ┌ (right and down)
-        if (col <= size - 3 && row <= size - 3) {
-          const right1 = this.board[row][col + 1]
-          const right2 = this.board[row][col + 2]
-          const down1 = this.board[row + 1][col]
-          const down2 = this.board[row + 2][col]
-          const lCells = [center, right1, right2, down1, down2]
-
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
-          }
-        }
-
-        // L-shape 4: ┐ (left and down)
-        if (col >= 2 && row <= size - 3) {
-          const left1 = this.board[row][col - 1]
-          const left2 = this.board[row][col - 2]
-          const down1 = this.board[row + 1][col]
-          const down2 = this.board[row + 2][col]
-          const lCells = [center, left1, left2, down1, down2]
-
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
-            patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
-          }
-        }
-      }
-    }
-
-    return patterns
-  }
-
-  /**
-   * Resolves overlapping patterns by keeping only the highest priority power-ups.
-   * When patterns share cells, only the one with the highest priority is kept.
-   */
-  resolvePowerUpPriorities (allPatterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }>): Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> {
-    if (allPatterns.length === 0) return []
-
-    // Sort patterns by priority (highest first)
-    const sortedPatterns = [...allPatterns].sort((a, b) => b.priority - a.priority)
-
-    const finalPatterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[] }> = []
-    const usedCells = new Set<Cell>()
-
-    for (const pattern of sortedPatterns) {
-      // Check if any cells in this pattern have already been used by a higher priority pattern
-      const hasOverlap = pattern.cells.some(cell => usedCells.has(cell))
-
-      if (!hasOverlap) {
-        // No overlap, keep this pattern
-        finalPatterns.push({
-          cell: pattern.cell,
-          type: pattern.type,
-          cells: pattern.cells
-        })
-
-        // Mark all cells in this pattern as used
-        pattern.cells.forEach(cell => usedCells.add(cell))
-      }
-    }
-
-    return finalPatterns
-  }
-
-  createPowerUpsFromChains (chains: Cell[][], swapContext?: { from: Position, to: Position } | null) {
-    let powerUpsCreated = false
-
-    // Collect ALL potential patterns with priorities
-    const allPatterns: Array<{ cell: Cell, type: PowerUpType, cells: Cell[], priority: number }> = []
-
-    // 1. Detect special patterns (rectangles, L-shapes, squares)
-    const specialPatterns = this.detectSpecialPatterns(swapContext)
-    allPatterns.push(...specialPatterns)
-
-    // 2. Detect linear chain patterns (4+ matches)
-    for (const chain of chains) {
-      if (chain.length >= 4) {
-        // Determine if chain is horizontal or vertical
-        const isHorizontal = chain[0].row === chain[1].row
-
-        // Choose the middle cell for the power-up
-        const middleIndex = Math.floor(chain.length / 2)
-        const powerUpCell = chain[middleIndex]
-
-        // Determine power-up type and priority based on chain length
-        let powerUpType: PowerUpType
-        let priority: number
-        if (chain.length >= 5) {
-          powerUpType = 'light-ball'  // 5+ match → color bomb (highest priority)
-          priority = 4
-        } else if (isHorizontal) {
-          powerUpType = 'horizontal-rocket'  // 4 horizontal → horizontal rocket
-          priority = 1
-        } else {
-          powerUpType = 'vertical-rocket'  // 4 vertical → vertical rocket
-          priority = 1
-        }
-
-        allPatterns.push({
-          cell: powerUpCell,
-          type: powerUpType,
-          cells: chain,
-          priority
-        })
-      }
-    }
-
-    // 3. Resolve conflicts - keep only highest priority patterns when they overlap
-    const finalPatterns = this.resolvePowerUpPriorities(allPatterns)
-
-    if (this.debugMode && finalPatterns.length > 0) {
-      console.log(`[DEBUG] Creating ${finalPatterns.length} power-up(s) after priority resolution`)
-      finalPatterns.forEach((p, i) => {
-        console.log(`  Power-up ${i + 1}: ${p.type} at [${p.cell.row}, ${p.cell.column}]`)
-      })
-    }
-
-    // 4. Create the final power-ups
-    for (const pattern of finalPatterns) {
-      powerUpsCreated = true
-      const powerUpCell = pattern.cell
-      const powerUpType = pattern.type
-
-      // Mark all cells in pattern for destruction except the power-up cell
-      for (const cell of pattern.cells) {
-        if (cell !== powerUpCell) {
-          cell.empty = true
-        }
-      }
-
-      // Create the power-up
-      this.createPowerUp(powerUpCell, powerUpType)
-    }
-
-    // Play booster creation sound if any power-ups were created
-    if (powerUpsCreated) {
-      this.sound.play('booster-created', { volume: 0.5 })
-    }
-  }
-
-  createPowerUp (powerUpCell: Cell, powerUpType: PowerUpType) {
-    // Mark the power-up cell - this prevents it from being destroyed
-    powerUpCell.powerup = powerUpType
-
-    // Change color to prevent matching with regular gems
-    powerUpCell.color = powerUpType
-
-    // Replace the sprite with the power-up sprite
-    const x = powerUpCell.column * CELL_SIZE + CELL_SIZE / 2
-    const y = powerUpCell.row * CELL_SIZE + CELL_SIZE / 2
-
-    // Destroy the old sprite
-    powerUpCell.sprite.destroy()
-
-    // Create new power-up sprite
-    powerUpCell.sprite = this.add.sprite(x, y, powerUpType)
-      .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
-      .setInteractive({ draggable: true })
-
-    // Create power-up creation burst effect
-    this.createPowerUpBurst(x, y, powerUpType)
-
-    // Track challenge progress for power-up creation
-    this.updateChallengeForPowerUp(powerUpType)
-  }
-
-  createPowerUpBurst (x: number, y: number, powerUpType: PowerUpType) {
-    // Color based on power-up type
-    let color = 0xffff00 // default yellow
-    if (powerUpType === 'light-ball') {
-      color = 0xffffff // white/rainbow
-    } else if (powerUpType === 'horizontal-rocket' || powerUpType === 'vertical-rocket') {
-      color = 0xff9900 // orange
-    }
-
-    // Create burst effect
-    const particles = this.add.particles(x, y, 'particle', {
-      speed: { min: 100, max: 250 },
-      scale: { start: 0.5, end: 0 },
-      alpha: { start: 1, end: 0 },
-      lifespan: 600,
-      quantity: 20,
-      tint: color,
-      blendMode: 'ADD',
-      angle: { min: 0, max: 360 }
-    })
-
-    // Auto-destroy after particles fade
-    this.time.delayedCall(700, () => particles.destroy())
-  }
 
   activatePowerUps (chains: Cell[][]) {
     // Find all power-ups that are adjacent to matching chains and activate them
@@ -1172,13 +947,14 @@ export default class GameScene extends Phaser.Scene {
 
     // Clear the power-up property and mark for destruction
     cell.powerup = null
-    cell.empty = true
+    this.markCellForDestructionImmediate(cell)
 
     // Mark additional cells based on power-up type
     // Also chain-activate any power-ups we hit
     switch (powerUpType) {
       case 'horizontal-rocket':
         // Destroy entire row
+        let horizontalChallengeCount = 0
         for (let col = 0; col < size; col++) {
           const targetCell = this.board[cell.row][col]
           // Chain-activate any power-ups in the row
@@ -1186,13 +962,24 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
             this.triggerPowerUp(targetCell, undefined, targetedCells)
           } else {
-            targetCell.empty = true
+            // Count toward challenge if this is the challenge color
+            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+              horizontalChallengeCount++
+            }
+            this.markCellForDestructionImmediate(targetCell)
           }
+        }
+        // Update challenge progress
+        if (horizontalChallengeCount > 0 && this.currentChallenge) {
+          console.log(`[CHALLENGE] Horizontal rocket destroyed ${horizontalChallengeCount} ${this.currentChallenge.color} gems`)
+          this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, horizontalChallengeCount)
+          this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
         }
         break
 
       case 'vertical-rocket':
         // Destroy entire column
+        let verticalChallengeCount = 0
         for (let row = 0; row < size; row++) {
           const targetCell = this.board[row][cell.column]
           // Chain-activate any power-ups in the column
@@ -1200,8 +987,18 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
             this.triggerPowerUp(targetCell, undefined, targetedCells)
           } else {
-            targetCell.empty = true
+            // Count toward challenge if this is the challenge color
+            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+              verticalChallengeCount++
+            }
+            this.markCellForDestructionImmediate(targetCell)
           }
+        }
+        // Update challenge progress
+        if (verticalChallengeCount > 0 && this.currentChallenge) {
+          console.log(`[CHALLENGE] Vertical rocket destroyed ${verticalChallengeCount} ${this.currentChallenge.color} gems`)
+          this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, verticalChallengeCount)
+          this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
         }
         break
 
@@ -1218,6 +1015,12 @@ export default class GameScene extends Phaser.Scene {
         }
 
         if (targetColor) {
+          // Track challenge progress if we're destroying the challenge color
+          let challengeGemCount = 0
+          if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetColor === this.currentChallenge.color) {
+            console.log(`[CHALLENGE] Color bomb targeting challenge color: ${targetColor}`)
+          }
+
           for (let row = 0; row < size; row++) {
             for (let col = 0; col < size; col++) {
               const targetCell = this.board[row][col]
@@ -1227,10 +1030,21 @@ export default class GameScene extends Phaser.Scene {
                   console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
                   this.triggerPowerUp(targetCell, undefined, targetedCells)
                 } else {
-                  targetCell.empty = true
+                  // Count toward challenge if this is the challenge color
+                  if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetColor === this.currentChallenge.color) {
+                    challengeGemCount++
+                  }
+                  this.markCellForDestructionImmediate(targetCell)
                 }
               }
             }
+          }
+
+          // Update challenge progress for all destroyed gems of the challenge color
+          if (challengeGemCount > 0 && this.currentChallenge) {
+            console.log(`[CHALLENGE] Color bomb destroyed ${challengeGemCount} ${targetColor} gems`)
+            this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, challengeGemCount)
+            this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
           }
         }
         break
@@ -1243,6 +1057,7 @@ export default class GameScene extends Phaser.Scene {
           { dr: 0, dc: -1 },  // left
           { dr: 0, dc: 1 }    // right
         ]
+        let tntChallengeCount = 0
         for (const dir of directions) {
           // Extend blast radius to 2 cells in each direction
           for (let distance = 1; distance <= 2; distance++) {
@@ -1254,10 +1069,20 @@ export default class GameScene extends Phaser.Scene {
                 console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
                 this.triggerPowerUp(targetCell, undefined, targetedCells)
               } else {
-                targetCell.empty = true
+                // Count toward challenge if this is the challenge color
+                if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                  tntChallengeCount++
+                }
+                this.markCellForDestructionImmediate(targetCell)
               }
             }
           }
+        }
+        // Update challenge progress
+        if (tntChallengeCount > 0 && this.currentChallenge) {
+          console.log(`[CHALLENGE] TNT destroyed ${tntChallengeCount} ${this.currentChallenge.color} gems`)
+          this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, tntChallengeCount)
+          this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
         }
         break
 
@@ -1267,8 +1092,9 @@ export default class GameScene extends Phaser.Scene {
         if (bestTarget) {
           // Mark this target as taken so other fly-aways won't target it
           targetedCells.add(bestTarget)
-          
+
           // First explosion at current position (cross pattern)
+          let flyAwayStartChallengeCount = 0
           for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
             const targetRow = cell.row + dir.dr
             const targetCol = cell.column + dir.dc
@@ -1279,9 +1105,19 @@ export default class GameScene extends Phaser.Scene {
                 console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}] from fly-away start`)
                 this.triggerPowerUp(targetCell, undefined, targetedCells)
               } else {
-                targetCell.empty = true
+                // Count toward challenge if this is the challenge color
+                if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                  flyAwayStartChallengeCount++
+                }
+                this.markCellForDestructionImmediate(targetCell)
               }
             }
+          }
+          // Update challenge progress for start explosion
+          if (flyAwayStartChallengeCount > 0 && this.currentChallenge) {
+            console.log(`[CHALLENGE] Fly-away start explosion destroyed ${flyAwayStartChallengeCount} ${this.currentChallenge.color} gems`)
+            this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, flyAwayStartChallengeCount)
+            this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
           }
 
           // Animate fly-away sprite flying to target
@@ -1361,6 +1197,7 @@ export default class GameScene extends Phaser.Scene {
             this.createPowerUpEffect(endX, endY, 'fly-away', toCell)
 
             // NOW destroy the target and surrounding cells (cross pattern)
+            let flyAwayTargetChallengeCount = 0
             for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
               const targetRow = toCell.row + dir.dr
               const targetCol = toCell.column + dir.dc
@@ -1370,16 +1207,29 @@ export default class GameScene extends Phaser.Scene {
                   console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
                   this.triggerPowerUp(targetCell)
                 } else if (!targetCell.empty) {
-                  // Mark empty and visually destroy the cell
-                  targetCell.empty = true
+                  // Count toward challenge if this is the challenge color
+                  if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                    flyAwayTargetChallengeCount++
+                  }
+                  // Visually destroy the cell (destroyCell will set empty)
                   this.destroyCell(targetCell)
                 }
               }
             }
-            // Mark target itself for destruction and visually destroy it
+            // Destroy target itself (destroyCell will set empty)
             if (!toCell.empty) {
-              toCell.empty = true
+              // Count toward challenge if this is the challenge color
+              if (this.currentChallenge && this.currentChallenge.type === 'color-match' && toCell.color === this.currentChallenge.color) {
+                flyAwayTargetChallengeCount++
+              }
               this.destroyCell(toCell)
+            }
+
+            // Update challenge progress for target explosion
+            if (flyAwayTargetChallengeCount > 0 && this.currentChallenge) {
+              console.log(`[CHALLENGE] Fly-away target explosion destroyed ${flyAwayTargetChallengeCount} ${this.currentChallenge.color} gems`)
+              this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, flyAwayTargetChallengeCount)
+              this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
             }
 
             // Destroy the flying sprite
@@ -1391,10 +1241,15 @@ export default class GameScene extends Phaser.Scene {
               await this.makeCellsFall()
               await this.refillBoard()
 
-              // Continue with cascades if there are more matches
-              while (MatchDetector.boardShouldExplode(this.board)) {
+              // Continue with cascades if there are more matches or special patterns
+              while (MatchDetector.boardShouldExplode(this.board) || this.powerUpSystem.hasSpecialPatterns(this.board)) {
                 const chains = MatchDetector.getExplodingChains(this.board)
-                this.createPowerUpsFromChains(chains)
+                this.powerUpSystem.createPowerUpsFromChains(
+                  this.board,
+                  chains,
+                  (type) => this.updateChallengeForPowerUp(type),
+                  null
+                )
                 await this.destroyCells()
                 this.setScore(this.score + this.computeScore(chains, 0))
                 await this.makeCellsFall()
@@ -1533,6 +1388,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   async refillBoard () {
+    // Use gem types from level config for consistent difficulty
+    const levelGems = this.levelConfig ? this.levelConfig.gemTypes : gems
+
     for (let column = 0; column < size; column++) {
       let numberOfEmptyCells = 0
       while (numberOfEmptyCells < size && this.board[numberOfEmptyCells][column].empty) {
@@ -1541,7 +1399,7 @@ export default class GameScene extends Phaser.Scene {
 
       for (let row = 0; row < numberOfEmptyCells; row++) {
         const cell = this.board[row][column]
-        cell.color = Phaser.Math.RND.pick(gems)
+        cell.color = Phaser.Math.RND.pick(levelGems)
         cell.empty = false
         cell.powerup = null
 
@@ -1561,6 +1419,9 @@ export default class GameScene extends Phaser.Scene {
 
     for (const cell of cells) {
       const sprite = cell.sprite
+      // Skip cells with no sprite (destroyed cells)
+      if (!sprite) continue
+
       const expectedX = cell.column * CELL_SIZE + CELL_SIZE / 2
       const expectedY = cell.row * CELL_SIZE + CELL_SIZE / 2
       if (sprite.x !== expectedX || sprite.y !== expectedY) {
@@ -1612,9 +1473,31 @@ export default class GameScene extends Phaser.Scene {
     )
   }
 
+  /**
+   * Helper method to mark a cell for destruction and immediately destroy its sprite
+   * This prevents "ghost sprites" - empty cells with visible sprites
+   */
+  markCellForDestructionImmediate (cell: Cell) {
+    cell.markedForDestruction = true
+    cell.empty = true
+    // Immediately destroy the sprite to prevent ghost gems
+    if (cell.sprite) {
+      cell.sprite.destroy()
+      cell.sprite = null
+    }
+  }
+
   destroyCell (cell: Cell) {
     return new Promise<void>(resolve => {
       cell.empty = true
+      cell.markedForDestruction = false
+
+      // If sprite is already destroyed (e.g., by markCellForDestructionImmediate),
+      // just resolve immediately
+      if (!cell.sprite) {
+        resolve()
+        return
+      }
 
       // Create particle explosion
       this.createGemParticles(cell)
@@ -1626,7 +1509,14 @@ export default class GameScene extends Phaser.Scene {
         alpha: 0,
         duration: destroyDuration,
         ease: 'Cubic.easeOut',
-        onComplete: () => resolve()
+        onComplete: () => {
+          // IMPORTANT: Destroy the sprite to prevent ghost gems
+          if (cell.sprite) {
+            cell.sprite.destroy()
+            cell.sprite = null
+          }
+          resolve()
+        }
       })
     })
   }
@@ -1663,8 +1553,8 @@ export default class GameScene extends Phaser.Scene {
 
   getCellsToDestroy (): Cell[] {
     return this.board.flat().filter(cell =>
-      // Destroy cells that should explode (matching 3+) or are marked as empty
-      (MatchDetector.shouldExplode(cell, this.board) || cell.empty) && !cell.powerup
+      // Destroy cells that should explode (matching 3+), are marked for destruction, or are already empty
+      (MatchDetector.shouldExplode(cell, this.board) || cell.markedForDestruction || cell.empty) && !cell.powerup
     )
   }
 
@@ -1808,27 +1698,46 @@ export default class GameScene extends Phaser.Scene {
           console.log(`=== POWER-UP ACTIVATED (click) ===`)
           console.log(`Activating ${draggedCell.powerup} at [${draggedCell.row}, ${draggedCell.column}]`)
 
+          // Create undo snapshot before move
+          this.createBoardSnapshot()
+
           this.moveInProgress = true
           this.draggedCell = null
 
+          // Log BEFORE power-up activation
+          console.log('\n🔵 BEFORE POWER-UP TRIGGER:')
+          this.logBoard()
+
           // Trigger the power-up (no swappedWith parameter for click activation)
           this.triggerPowerUp(draggedCell)
+
+          console.log('\n🟡 AFTER POWER-UP TRIGGER (before destroy/fall/refill):')
+          this.logBoard()
+
           await this.destroyCells()
           await this.makeCellsFall()
           await this.refillBoard()
+
+          console.log('\n🟢 AFTER DESTROY/FALL/REFILL:')
+          this.logBoard()
 
           // Decrement moves for using the power-up
           this.decrementMoves()
 
           // Continue game loop for cascades
           let cascades = 0
-          while (MatchDetector.boardShouldExplode(this.board)) {
+          while (MatchDetector.boardShouldExplode(this.board) || this.powerUpSystem.hasSpecialPatterns(this.board)) {
             const chains = MatchDetector.getExplodingChains(this.board)
 
             // Track challenge progress for matched gems
             this.updateChallengeForMatches(chains)
 
-            this.createPowerUpsFromChains(chains, null)
+            this.powerUpSystem.createPowerUpsFromChains(
+              this.board,
+              chains,
+              (type) => this.updateChallengeForPowerUp(type),
+              null
+            )
             this.showFloatingScores(chains, cascades)
             await this.destroyCells()
             await this.makeCellsFall()
@@ -1862,6 +1771,10 @@ export default class GameScene extends Phaser.Scene {
         const secondCell = targetCell
 
         console.log('Performing swap...')
+
+        // Create undo snapshot before move
+        this.createBoardSnapshot()
+
         this.moveInProgress = true
         this.draggedCell = null
 
@@ -1879,6 +1792,10 @@ export default class GameScene extends Phaser.Scene {
         const hasPowerUp = firstCell.powerup || secondCell.powerup
         if (hasPowerUp) {
           console.log('=== POWER-UP SWAPPED (via drag)! ===')
+
+          console.log('\n🔵 BEFORE POWER-UP TRIGGER (swap):')
+          this.logBoard()
+
           if (firstCell.powerup) {
             console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
             this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
@@ -1887,21 +1804,57 @@ export default class GameScene extends Phaser.Scene {
             console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
             this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
           }
+
+          console.log('\n🟡 AFTER POWER-UP TRIGGER (swap, before destroy/fall/refill):')
+          this.logBoard()
+
           await this.destroyCells()
           await this.makeCellsFall()
           await this.refillBoard()
+
+          console.log('\n🟢 AFTER DESTROY/FALL/REFILL (swap):')
+          this.logBoard()
         }
 
         const shouldExplode = MatchDetector.boardShouldExplode(this.board)
-        console.log(`Board should explode: ${shouldExplode}, has power-up: ${hasPowerUp}`)
+        const hasSpecialPatterns = this.powerUpSystem.hasSpecialPatterns(this.board, this.lastSwap)
+        console.log(`Board should explode: ${shouldExplode}, has power-up: ${hasPowerUp}, has special patterns: ${hasSpecialPatterns}`)
 
-        if (shouldExplode || hasPowerUp) {
+        if (shouldExplode || hasPowerUp || hasSpecialPatterns) {
           // Valid move - decrement moves counter
           console.log('Valid move! Processing...')
           this.decrementMoves()
 
           let cascades = 0
-          while (MatchDetector.boardShouldExplode(this.board)) {
+
+          // First, handle special patterns if they exist but no regular matches
+          if (hasSpecialPatterns && !shouldExplode) {
+            console.log('Processing special patterns without regular matches')
+            const patterns = this.powerUpSystem.detectSpecialPatterns(this.board, this.lastSwap)
+
+            // Create synthetic chains from pattern cells
+            const syntheticChains = patterns.map(p => p.cells)
+
+            // Track challenge progress for matched gems
+            this.updateChallengeForMatches(syntheticChains)
+
+            // Create power-ups from the special patterns
+            this.powerUpSystem.createPowerUpsFromChains(
+              this.board,
+              syntheticChains,
+              (type) => this.updateChallengeForPowerUp(type),
+              this.lastSwap
+            )
+
+            this.showFloatingScores(syntheticChains, cascades)
+            await this.destroyCells()
+            await this.makeCellsFall()
+            await this.refillBoard()
+            cascades++
+          }
+
+          // Then continue with regular cascade loop for any subsequent matches or special patterns
+          while (MatchDetector.boardShouldExplode(this.board) || this.powerUpSystem.hasSpecialPatterns(this.board)) {
             const chains = MatchDetector.getExplodingChains(this.board)
 
             // Track challenge progress for matched gems
@@ -1910,9 +1863,14 @@ export default class GameScene extends Phaser.Scene {
             console.log('=== BEFORE POWER-UP CREATION (drag) ===')
             this.logBoardState()
 
-            // Create power-ups from chains of 4+ gems
+            // Create power-ups from chains of 4+ gems AND special patterns
             // Pass swap context on first cascade, null on subsequent cascades
-            this.createPowerUpsFromChains(chains, cascades === 0 ? this.lastSwap : null)
+            this.powerUpSystem.createPowerUpsFromChains(
+              this.board,
+              chains,
+              (type) => this.updateChallengeForPowerUp(type),
+              cascades === 0 ? this.lastSwap : null
+            )
 
             console.log('=== AFTER POWER-UP CREATION (drag) ===')
             this.logBoardState()
@@ -1987,9 +1945,48 @@ export default class GameScene extends Phaser.Scene {
         spawnPowerup: (type: PowerUpType, row: number, col: number) => this.spawnPowerup(type, row, col),
         loadTestBoard: (name: string) => this.loadTestBoard(name),
         logBoard: () => this.logBoard(),
-        getWinningMoves: () => this.getWinningMoves()
+        getWinningMoves: () => this.getWinningMoves(),
+        exportBoard: () => this.exportBoard()
       }
     }
+  }
+
+  /**
+   * Export current board state as JSON for sharing and analysis
+   */
+  exportBoard () {
+    const boardData = []
+    for (let row = 0; row < size; row++) {
+      const rowData = []
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (cell.powerup) {
+          rowData.push(`[${cell.powerup}]`)
+        } else if (cell.empty) {
+          rowData.push('____')
+        } else {
+          rowData.push(cell.color?.substring(0, 4).toUpperCase() || '____')
+        }
+      }
+      boardData.push(rowData)
+    }
+
+    const output = {
+      board: boardData,
+      score: this.score,
+      moves: this.moves,
+      timestamp: Date.now()
+    }
+
+    console.log('\n=== BOARD EXPORT ===')
+    console.log(JSON.stringify(output, null, 2))
+    console.log('\n=== VISUAL BOARD ===')
+    boardData.forEach((row, i) => {
+      console.log(`Row ${i}: ${row.join(' | ')}`)
+    })
+    console.log('=== END EXPORT ===\n')
+
+    return output
   }
 
   setSeed (seed: number) {
@@ -2029,14 +2026,14 @@ export default class GameScene extends Phaser.Scene {
     if (name === 'tnt-test' || name === 'bomb-test') {
       // Load a simple test board for TNT
       const tntTestBoard = [
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ]
 
       // Load the board
@@ -2068,91 +2065,172 @@ export default class GameScene extends Phaser.Scene {
       return
     }
 
+    if (name === 'double-flyaway') {
+      // Load a simple test board for double fly-away testing
+      const doubleFlyawayBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = doubleFlyawayBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn 2 fly-away power-ups next to each other
+      this.spawnPowerup('fly-away', 4, 3)
+      this.spawnPowerup('fly-away', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with 2 fly-away power-ups at [4,3] and [4,4]`)
+      console.log('[DEBUG] Click one to activate and test interaction between adjacent fly-aways')
+      return
+    }
+
     // Predefined test boards
     const testBoards: { [key: string]: string[][] } = {
       match5: [
         ['blue', 'blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'green', 'yellow', 'pink', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'blue', 'red', 'green', 'yellow', 'pink', 'blue'],
+        ['green', 'yellow', 'pink', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'blue', 'red', 'green', 'yellow', 'pink', 'blue', 'red'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'blue', 'red', 'green'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'blue', 'red', 'green'],
+        ['red', 'green', 'yellow', 'pink', 'blue', 'red', 'green', 'yellow']
       ],
-      lshape: [
-        ['red', 'red', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'green', 'red', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'red', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+      // L-shape └ (right and up): Swap red [4,0] with green [3,0] to complete
+      // Creates: red at [3,0], red [3,1], red [3,2] (horizontal) + red [2,0], red [1,0] (vertical up)
+      'lshape-right-up': [
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green'],
+        ['red', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow'],
+        ['red', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
+        ['green', 'red', 'red', 'pink', 'blue', 'green', 'yellow', 'pink'],
+        ['red', 'yellow', 'blue', 'green', 'yellow', 'pink', 'blue', 'green'],
+        ['blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green']
+      ],
+      // L-shape ┘ (left and up): Swap red [4,7] with green [3,7] to complete
+      // Creates: red at [3,7], red [3,6], red [3,5] (horizontal left) + red [2,7], red [1,7] (vertical up)
+      'lshape-left-up': [
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green'],
+        ['blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'red'],
+        ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'red'],
+        ['pink', 'blue', 'green', 'yellow', 'pink', 'red', 'red', 'green'],
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'red'],
+        ['blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
+        ['pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow']
+      ],
+      // L-shape ┌ (right and down): Swap red [3,0] with green [4,0] to complete
+      // Creates: red at [4,0], red [4,1], red [4,2] (horizontal) + red [5,0], red [6,0] (vertical down)
+      'lshape-right-down': [
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green'],
+        ['blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
+        ['red', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow'],
+        ['green', 'red', 'red', 'pink', 'blue', 'green', 'yellow', 'pink'],
+        ['red', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
+        ['red', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow'],
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green']
+      ],
+      // L-shape ┐ (left and down): Swap red [3,7] with green [4,7] to complete
+      // Creates: red at [4,7], red [4,6], red [4,5] (horizontal left) + red [5,7], red [6,7] (vertical down)
+      'lshape-left-down': [
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green'],
+        ['blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
+        ['pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'red'],
+        ['yellow', 'pink', 'blue', 'green', 'yellow', 'red', 'red', 'green'],
+        ['blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'red'],
+        ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'red'],
+        ['pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow']
       ],
       // Fly-away test from RIGHT: swap blue [1,1] with red [1,0] (swap FROM right cell TO left)
       // Pattern: [0,0]=red [0,1]=red [1,0]=red [1,1]=blue → swap to complete 2x2
       square: [
-        ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['red', 'blue', 'red', 'white', 'yellow', 'green', 'orange', 'yellow'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'green'],
+        ['red', 'blue', 'red', 'pink', 'yellow', 'green', 'yellow', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       // Fly-away test from LEFT: swap blue [1,0] with red [1,1] (swap FROM left cell TO right)
       // Pattern: [0,0]=red [0,1]=red [1,0]=blue [1,1]=red → swap to complete 2x2
       'square-left': [
-        ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['blue', 'red', 'orange', 'white', 'yellow', 'green', 'white', 'yellow'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'green', 'yellow', 'green', 'yellow', 'blue', 'green'],
+        ['blue', 'red', 'yellow', 'green', 'yellow', 'green', 'green', 'yellow'],
+        ['red', 'green', 'yellow', 'blue', 'red', 'green', 'yellow', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       match4h: [
-        ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       match4v: [
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['red', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['red', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['white', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['orange', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['blue', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow']
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['red', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['red', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['red', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['pink', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['yellow', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['blue', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['yellow', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow']
       ],
       rect3x2: [
-        ['red', 'red', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['red', 'red', 'red', 'white', 'orange', 'blue', 'red', 'green'],
-        ['yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['red', 'red', 'red', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
       rect2x3: [
-        ['red', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'green'],
-        ['red', 'red', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'red', 'orange', 'blue', 'red', 'green', 'yellow', 'white'],
-        ['green', 'yellow', 'white', 'orange', 'blue', 'red', 'green', 'yellow'],
-        ['white', 'orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange'],
-        ['orange', 'blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue'],
-        ['blue', 'red', 'green', 'yellow', 'white', 'orange', 'blue', 'red'],
-        ['red', 'green', 'yellow', 'white', 'orange', 'blue', 'red', 'green']
+        ['red', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'green'],
+        ['red', 'red', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['red', 'red', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ]
     }
 
@@ -2162,6 +2240,8 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const boardConfig = testBoards[name]
+    console.log(`[DEBUG] Loading ${name} with ${boardConfig.length} rows`)
+
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const cell = this.board[row][col]
@@ -2180,6 +2260,12 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          // Check if texture exists
+          if (!this.textures.exists(cell.color)) {
+            console.error(`[DEBUG] Texture '${cell.color}' does not exist at [${row},${col}]!`)
+          }
+
           cell.sprite = this.add.sprite(x, y, cell.color)
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
@@ -2191,7 +2277,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   logBoard () {
+    console.log('========================================')
     console.log('[DEBUG] Current Board State:')
+    console.log('========================================')
     for (let row = 0; row < size; row++) {
       const rowData = []
       for (let col = 0; col < size; col++) {
@@ -2206,6 +2294,29 @@ export default class GameScene extends Phaser.Scene {
       }
       console.log(`Row ${row}: ${rowData.join(' | ')}`)
     }
+
+    // Check for sprite inconsistencies (ghost gems)
+    console.log('\n[DEBUG] Sprite Check:')
+    let ghostCount = 0
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (cell.empty && cell.sprite && cell.sprite.active) {
+          console.warn(`  ⚠️  GHOST: Empty cell [${row},${col}] has active sprite!`)
+          ghostCount++
+        }
+        if (!cell.empty && (!cell.sprite || !cell.sprite.active)) {
+          console.warn(`  ⚠️  MISSING: Non-empty cell [${row},${col}] (${cell.color}) has no active sprite!`)
+          ghostCount++
+        }
+      }
+    }
+    if (ghostCount === 0) {
+      console.log('  ✓ No sprite inconsistencies detected')
+    } else {
+      console.error(`  ✗ Found ${ghostCount} sprite inconsistencies!`)
+    }
+    console.log('========================================\n')
   }
 }
 
