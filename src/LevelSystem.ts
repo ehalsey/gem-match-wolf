@@ -138,7 +138,7 @@ export class LevelSystem {
 
   /**
    * Generate a color-match challenge
-   * Balanced with move count: Easy=15 gems/20 moves, Medium=30 gems/25 moves, Hard=50 gems/30 moves
+   * Balanced with move count: Easy=50 gems/20 moves, Medium=65 gems/25 moves, Hard=85 gems/30 moves
    */
   private static generateColorMatchChallenge(difficulty: Difficulty): Challenge {
     const color = this.GEM_COLORS[Math.floor(Math.random() * this.GEM_COLORS.length)]
@@ -146,13 +146,13 @@ export class LevelSystem {
 
     switch (difficulty) {
       case 'easy':
-        targetValue = 15  // 20 moves
+        targetValue = 50  // 20 moves (2.5 gems/move)
         break
       case 'medium':
-        targetValue = 30  // 25 moves
+        targetValue = 65  // 25 moves (2.6 gems/move)
         break
       case 'hard':
-        targetValue = 50  // 30 moves
+        targetValue = 85  // 30 moves (2.83 gems/move)
         break
     }
 
