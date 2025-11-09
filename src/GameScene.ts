@@ -2235,7 +2235,24 @@ export default class GameScene extends Phaser.Scene {
 
       for (let row = 0; row < numberOfEmptyCells; row++) {
         const cell = this.board[row][column]
-        cell.color = Phaser.Math.RND.pick(levelGems)
+
+        // Avoid creating automatic matches when spawning new gems
+        // Only matches from player swaps or falling gems should trigger
+        const possibleColors = []
+        for (let color of levelGems) {
+          cell.color = color
+          // Check for both 3+ matches AND 2x2 squares
+          if (!MatchDetector.shouldExplode(cell, this.board) && !MatchDetector.wouldCreate2x2Square(cell, this.board)) {
+            possibleColors.push(color)
+          }
+        }
+
+        // If all colors would create matches (rare), just pick randomly
+        // This prevents infinite loops but should almost never happen
+        cell.color = possibleColors.length > 0
+          ? Phaser.Math.RND.pick(possibleColors)
+          : Phaser.Math.RND.pick(levelGems)
+
         cell.empty = false
         cell.powerup = null
         cell.markedForDestruction = false
