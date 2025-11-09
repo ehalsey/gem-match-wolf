@@ -12,14 +12,9 @@ import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
 import { MatchDetector } from './game/MatchDetector'
 import { PowerUpSystem } from './game/PowerUpSystem'
 import { type Cell, type PowerUpType, type Position } from './types'
+import { GEM_DEFINITIONS, getGemSprite, getAllGemIds } from './GemConfig'
 
-const gems = [
-  'blue',
-  'green',
-  'red',
-  'pink',
-  'yellow'
-]
+const gems = getAllGemIds()
 
 /**
  * Number of cells required to trigger an explosion
@@ -77,7 +72,11 @@ export default class GameScene extends Phaser.Scene {
   }
 
   preload () {
-    gems.forEach(gem => this.load.image(gem, `assets/${gem}.png`))
+    // Load gem sprites (load unique sprites only, not duplicates)
+    const uniqueSprites = new Set(GEM_DEFINITIONS.map(gem => gem.sprite))
+    uniqueSprites.forEach(sprite => {
+      this.load.image(sprite, `assets/${sprite}.png`)
+    })
 
     // Load power-up sprites
     this.load.image('horizontal-rocket', 'assets/horizontal-rocket.png')
@@ -300,6 +299,17 @@ export default class GameScene extends Phaser.Scene {
     graphics.destroy()
   }
 
+  /**
+   * Get the sprite texture name for a cell
+   * This allows gem IDs to be mapped to different sprite assets
+   */
+  getCellTexture (cell: Cell): string {
+    if (cell.powerup) {
+      return cell.powerup
+    }
+    return getGemSprite(cell.color)
+  }
+
   initBoard () {
     // Create empty board
     this.board = createEmptyBoard(size)
@@ -329,7 +339,7 @@ export default class GameScene extends Phaser.Scene {
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = row * CELL_SIZE + CELL_SIZE / 2
-        cell.sprite = this.add.sprite(x, y, cell.color)
+        cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
           .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
           .setInteractive({ draggable: true })
       }
@@ -579,7 +589,7 @@ export default class GameScene extends Phaser.Scene {
 
       const x = cellData.column * CELL_SIZE + CELL_SIZE / 2
       const y = cellData.row * CELL_SIZE + CELL_SIZE / 2
-      cell.sprite = this.add.sprite(x, y, cell.color)
+      cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
         .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
         .setInteractive({ draggable: true })
     }
@@ -2232,7 +2242,7 @@ export default class GameScene extends Phaser.Scene {
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = (row - numberOfEmptyCells) * CELL_SIZE + CELL_SIZE / 2
-        cell.sprite = this.add.sprite(x, y, cell.color)
+        cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
           .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
           .setInteractive({ draggable: true })
       }
@@ -2246,7 +2256,7 @@ export default class GameScene extends Phaser.Scene {
           console.warn(`[REFILL] Cell [${row},${col}] is non-empty but has no sprite! Creating sprite for ${cell.color}`)
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
           cell.markedForDestruction = false
@@ -3028,7 +3038,7 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3071,7 +3081,7 @@ export default class GameScene extends Phaser.Scene {
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
 
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3116,7 +3126,7 @@ export default class GameScene extends Phaser.Scene {
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
 
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3159,7 +3169,7 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3208,7 +3218,7 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3253,7 +3263,7 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3495,7 +3505,7 @@ export default class GameScene extends Phaser.Scene {
             console.error(`[DEBUG] Texture '${cell.color}' does not exist at [${row},${col}]!`)
           }
 
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }

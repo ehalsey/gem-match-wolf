@@ -7,6 +7,8 @@
  * - Hard: 20 moves, tough challenges
  */
 
+import { getAllGemIds } from './GemConfig'
+
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
 export type ChallengeType =
@@ -48,7 +50,7 @@ export class LevelSystem {
     hard: 30
   }
 
-  private static readonly GEM_COLORS = ['red', 'blue', 'green', 'yellow', 'pink']
+  private static readonly GEM_COLORS = getAllGemIds()
 
   private static readonly POWER_UP_TYPES = [
     { id: 'horizontal-rocket', name: 'Horizontal Rocket' },
