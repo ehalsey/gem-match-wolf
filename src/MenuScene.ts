@@ -185,6 +185,12 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   onChallengeUpdated (challenge: Challenge) {
+    // Update level label
+    const currentLevel = LevelSystem.getCurrentLevel()
+    if (this.levelLabel) {
+      this.levelLabel.setText(`Level ${currentLevel}`)
+    }
+
     if (this.challengeProgress) {
       const progressText = `${challenge.currentValue} / ${challenge.targetValue}`
       const completionPercent = Math.floor((challenge.currentValue / challenge.targetValue) * 100)
