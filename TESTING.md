@@ -1,6 +1,22 @@
 # Testing & Debug Guide
 
-This guide explains how to test different game scenarios without rebuilding.
+This guide explains how to test different game scenarios and report bugs efficiently.
+
+## Quick Reference
+
+**Enable Debug Mode**: `http://localhost:8000/?debug=true`
+
+**Most Useful Commands**:
+- `gameDebug.captureMove(fromRow, fromCol, toRow, toCol, "expected")` - **Bug reporting tool** (undo first!)
+- `gameDebug.logBoard()` - View current board state
+- `gameDebug.exportBoard()` - Export board as JSON
+- `gameDebug.loadTestBoard('match5')` - Load test scenario
+- `gameDebug.getWinningMoves()` - Show available moves
+
+**Keyboard Shortcuts**:
+- `U` or `Z` - **Undo last move** (essential for bug reporting!)
+
+---
 
 ## URL Parameters (Recommended)
 
@@ -76,6 +92,30 @@ gameDebug.getWinningMoves()
 ```
 Returns array of all valid moves that would create matches.
 
+### Export Board State
+```javascript
+gameDebug.exportBoard()
+```
+Exports the current board as JSON with visual display. Useful for sharing board states or saving test scenarios.
+
+### Capture Move for Bug Reporting (NEW!)
+```javascript
+gameDebug.captureMove(fromRow, fromCol, toRow, toCol, "Expected behavior description")
+```
+**The easiest way to report bugs!** This command:
+1. Captures board state BEFORE the move
+2. Executes the move automatically
+3. Captures board state AFTER the move
+4. Generates a formatted bug report you can copy/paste
+
+**Example:**
+```javascript
+// Test a move from [0,0] to [0,1] that should create a horizontal rocket
+gameDebug.captureMove(0, 0, 0, 1, "Should create horizontal rocket when 4 blues align")
+```
+
+The console will output a complete bug report template with before/after states that you can copy and share.
+
 ## Testing Workflow Examples
 
 ### Test Light Ball (5-Match)
@@ -120,6 +160,62 @@ Returns array of all valid moves that would create matches.
 3. Copy the seed from the URL
 4. Reload with that seed to reproduce the scenario
 
+## Bug Reporting Workflow
+
+Found a bug? Here's the most efficient way to report it:
+
+### Quick Method (Recommended)
+1. Enable debug mode: `http://localhost:8000/?debug=true`
+2. Open browser console (F12)
+3. Play until you find the problematic move
+4. **IMPORTANT: Press `U` or `Z` to undo that move** (captureMove needs to execute it fresh)
+5. Use the bug capture command:
+   ```javascript
+   gameDebug.captureMove(fromRow, fromCol, toRow, toCol, "What should happen")
+   ```
+6. The console outputs a **complete bug report** - just copy and paste it!
+
+**Note:** If you already made the move and forgot to undo, you can still manually capture state with `gameDebug.exportBoard()` and describe what happened.
+
+### Example Bug Report Workflow
+```javascript
+// 1. You make a move from [2,3] to [2,4] and notice it doesn't create the expected rocket
+// 2. Press U or Z to undo the move
+// 3. Run captureMove to automatically test and capture the bug:
+gameDebug.captureMove(2, 3, 2, 4, "Should create horizontal rocket from 4 blues")
+
+// Console outputs:
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║               MOVE CAPTURE - BUG REPORTING TOOL               ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//
+// 📸 BEFORE MOVE:
+//    From: [2, 3] → To: [2, 4]
+//    ... complete before state ...
+//
+// 📸 AFTER MOVE:
+//    ... complete after state ...
+//
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║                    BUG REPORT TEMPLATE                        ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//
+// ## Bug Report
+// **Move**: [2, 3] → [2, 4]
+// **Expected**: Should create horizontal rocket from 4 blues
+// **Actual**: [You describe what actually happened]
+//
+// **Before State**: { ... complete JSON ... }
+// **After State**: { ... complete JSON ... }
+```
+
+### Manual Method
+If you prefer to capture state manually:
+1. Before making the move: `gameDebug.exportBoard()`
+2. Make the move by clicking
+3. After the move: `gameDebug.exportBoard()`
+4. Copy both outputs and describe the issue
+
 ## Tips
 
 - **Quick Testing**: Use URL parameters to instantly set up test scenarios
@@ -127,6 +223,7 @@ Returns array of all valid moves that would create matches.
 - **No Rebuild**: All commands work at runtime - no need to restart dev server
 - **Debug Logging**: Enable `?debug=true` to see helpful console messages
 - **Infinite Testing**: Debug mode disables "no more moves" game over, so you can keep testing even without valid moves
+- **Bug Reporting**: Use `gameDebug.captureMove()` for instant bug reports with before/after state
 - **Production Safety**: Debug features only work in development, won't affect deployed game
 
 ## Common Test Cases
@@ -143,3 +240,15 @@ Returns array of all valid moves that would create matches.
 | Fly-away double explosion | `?board=square` |
 | Specific seed | `?seed=42` |
 | Full debug mode | `?debug=true&seed=999` |
+
+## Debug Command Reference
+
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `gameDebug.captureMove(fromRow, fromCol, toRow, toCol, expected)` | **Bug reporting** - Auto-capture before/after state | `captureMove(2, 3, 2, 4, "Should create rocket")` |
+| `gameDebug.logBoard()` | View current board with sprite validation | `logBoard()` |
+| `gameDebug.exportBoard()` | Export board as JSON | `exportBoard()` |
+| `gameDebug.getWinningMoves()` | List all valid moves | `getWinningMoves()` |
+| `gameDebug.loadTestBoard(name)` | Load predefined test board | `loadTestBoard('match5')` |
+| `gameDebug.spawnPowerup(type, row, col)` | Spawn specific power-up | `spawnPowerup('tnt', 4, 4)` |
+| `gameDebug.setSeed(number)` | Set random seed (restart required) | `setSeed(12345)` |

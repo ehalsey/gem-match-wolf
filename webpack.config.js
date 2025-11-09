@@ -43,7 +43,26 @@ module.exports = {
     port: 8000,
     static: {
       directory: path.join(__dirname, '.'),
-      watch: true
+      watch: {
+        ignored: /node_modules/,
+        poll: false
+      }
+    },
+    hot: true,
+    liveReload: true,  // Enable live reload for code changes
+    watchFiles: {
+      paths: ['src/**/*.ts', 'assets/**/*', 'styles.css', 'index.html'],
+      options: {
+        ignored: /node_modules/,
+        usePolling: false,
+        aggregateTimeout: 500,  // Wait 500ms after last change before reloading (prevents false triggers)
+        poll: false
+      }
     }
+  },
+  watchOptions: {
+    ignored: /node_modules/,
+    aggregateTimeout: 500,  // Debounce file changes to prevent rapid rebuilds
+    poll: false
   }
 }
