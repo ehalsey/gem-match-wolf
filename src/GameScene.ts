@@ -229,6 +229,32 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  loadNextLevel () {
+    this.isGameOver = false
+    this.undoSnapshot = null
+    this.destroyBoard()
+    this.initBoard()
+
+    // Save initial board state for retry functionality
+    this.saveInitialBoardState()
+
+    // Load the current level (already advanced in gameOver)
+    this.levelConfig = LevelSystem.getCurrentLevelConfig()
+    this.currentChallenge = { ...this.levelConfig.challenge }
+
+    // Keep cumulative score
+    this.setScore(LevelSystem.getScore())
+    this.setMoves(this.levelConfig.moves)
+
+    // Notify MenuScene of new challenge and level
+    this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+
+    if (this.gameOverScreen) {
+      this.gameOverScreen.destroy()
+      this.gameOverScreen = null
+    }
+  }
+
   destroyBoard () {
     this.board.forEach(row => row.forEach(cell => cell.sprite.destroy()))
   }
@@ -891,8 +917,8 @@ export default class GameScene extends Phaser.Scene {
       console.log(`Level complete! Advanced to level ${nextLevel}`)
     }
 
-    // Update personal best
-    const isNewBest = ScoreStorageService.updatePersonalBest(this.score)
+    // Only update personal best on game over (not level complete)
+    const isNewBest = !isLevelComplete && ScoreStorageService.updatePersonalBest(this.score)
 
     const gameOverBackground = this.add.rectangle(0, 0, this.zone.width, this.zone.height)
       .setOrigin(0)
@@ -908,14 +934,15 @@ export default class GameScene extends Phaser.Scene {
       .setColor(titleColor)
       .setFontStyle('bold')
 
-    const finalScoreText = this.add.text(0, 10, `Final Score: ${this.score}`)
+    // Only show score on game over (not level complete)
+    const finalScoreText = !isLevelComplete ? this.add.text(0, 10, `Final Score: ${this.score}`)
       .setOrigin(0.5)
       .setFontFamily('Arial')
       .setFontSize(24)
       .setColor('#FFD700')
-      .setFontStyle('bold')
+      .setFontStyle('bold') : null
 
-    // Add new best indicator if applicable
+    // Add new best indicator if applicable (only on game over, not level complete)
     const newBestText = isNewBest ? this.add.text(0, 40, '🎉 New Personal Best! 🎉')
       .setOrigin(0.5)
       .setFontFamily('Arial')
@@ -957,7 +984,7 @@ export default class GameScene extends Phaser.Scene {
         .setFontStyle('bold')
         .setInteractive({ useHandCursor: true })
         .on('pointerup', () => {
-          this.startNewGame()
+          this.loadNextLevel()
         })
         .on('pointerover', () => {
           actionButton.setColor('#ffffff')
@@ -996,8 +1023,12 @@ export default class GameScene extends Phaser.Scene {
     this.gameOverScreen = this.add.container(0, 0)
       .add(gameOverBackground)
       .add(gameOverTitle)
-      .add(finalScoreText)
       .setDepth(1)
+
+    if (finalScoreText) {
+      this.gameOverScreen.add(finalScoreText)
+      Phaser.Display.Align.In.Center(finalScoreText, gameOverBackground, 0, 10)
+    }
 
     if (newBestText) {
       this.gameOverScreen.add(newBestText)
@@ -1011,7 +1042,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (actionButton) {
       this.gameOverScreen.add(actionButton)
-      Phaser.Display.Align.In.Center(actionButton, gameOverBackground, 0, isNewBest ? 70 : 60)
+      Phaser.Display.Align.In.Center(actionButton, gameOverBackground, 0, isLevelComplete ? 0 : (isNewBest ? 70 : 60))
     }
 
     if (restartHint) {
@@ -1019,8 +1050,7 @@ export default class GameScene extends Phaser.Scene {
       Phaser.Display.Align.In.Center(restartHint, gameOverBackground, 0, canRetry ? (isNewBest ? 105 : 95) : (isNewBest ? 70 : 60))
     }
 
-    Phaser.Display.Align.In.Center(gameOverTitle, gameOverBackground, 0, -50)
-    Phaser.Display.Align.In.Center(finalScoreText, gameOverBackground, 0, 10)
+    Phaser.Display.Align.In.Center(gameOverTitle, gameOverBackground, 0, isLevelComplete ? -20 : -50)
 
     // Notify MenuScene to update personal best display
     this.registry.events.emit('PERSONAL_BEST_UPDATED')
