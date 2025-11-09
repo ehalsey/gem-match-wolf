@@ -119,7 +119,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.exportBoard() - Export current board state as JSON')
       console.log('[DEBUG] Keyboard shortcuts:')
       console.log('  - U or Z: Undo last move')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, rect3x2, rect2x3, square, square-left, tnt-test, double-flyaway')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, rect3x2, rect2x3, square, square-left, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo')
     }
 
     this.createBackground()
@@ -1128,6 +1128,116 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  triggerVerticalRocketCombo (firstCell: Cell, secondCell: Cell) {
+    // Test helper and combo trigger for two vertical rockets
+    // First rocket clears column, second clears row
+    if (firstCell.powerup !== 'vertical-rocket' || secondCell.powerup !== 'vertical-rocket') {
+      console.error('Both cells must have vertical-rocket powerup')
+      return
+    }
+
+    console.log('🚀🚀 VERTICAL ROCKET + VERTICAL ROCKET COMBO!')
+    console.log(`First rocket (vertical) at [${firstCell.row}, ${firstCell.column}]`)
+    console.log(`Second rocket (will clear row ${secondCell.row}) at [${secondCell.row}, ${secondCell.column}]`)
+
+    // Play rocket sound
+    this.sound.play('rocket', { volume: 0.4 })
+
+    // Create effects for both rockets
+    const x1 = firstCell.column * CELL_SIZE + CELL_SIZE / 2
+    const y1 = firstCell.row * CELL_SIZE + CELL_SIZE / 2
+    this.createPowerUpEffect(x1, y1, 'vertical-rocket', firstCell)
+
+    const x2 = secondCell.column * CELL_SIZE + CELL_SIZE / 2
+    const y2 = secondCell.row * CELL_SIZE + CELL_SIZE / 2
+    this.createPowerUpEffect(x2, y2, 'horizontal-rocket', secondCell)
+
+    // Clear both powerup properties
+    firstCell.powerup = null
+    secondCell.powerup = null
+
+    // Mark both cells for destruction
+    this.markCellForDestructionImmediate(firstCell)
+    this.markCellForDestructionImmediate(secondCell)
+
+    // Destroy entire column (from first rocket)
+    for (let row = 0; row < size; row++) {
+      const targetCell = this.board[row][firstCell.column]
+      if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
+        console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+        this.triggerPowerUp(targetCell)
+      } else {
+        this.markCellForDestructionImmediate(targetCell)
+      }
+    }
+
+    // Destroy entire row (from second rocket)
+    for (let col = 0; col < size; col++) {
+      const targetCell = this.board[secondCell.row][col]
+      if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
+        console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+        this.triggerPowerUp(targetCell)
+      } else {
+        this.markCellForDestructionImmediate(targetCell)
+      }
+    }
+  }
+
+  triggerHorizontalRocketCombo (firstCell: Cell, secondCell: Cell) {
+    // Test helper and combo trigger for two horizontal rockets
+    // First rocket clears row, second clears column
+    if (firstCell.powerup !== 'horizontal-rocket' || secondCell.powerup !== 'horizontal-rocket') {
+      console.error('Both cells must have horizontal-rocket powerup')
+      return
+    }
+
+    console.log('🚀🚀 HORIZONTAL ROCKET + HORIZONTAL ROCKET COMBO!')
+    console.log(`First rocket (horizontal) at [${firstCell.row}, ${firstCell.column}]`)
+    console.log(`Second rocket (will clear column ${secondCell.column}) at [${secondCell.row}, ${secondCell.column}]`)
+
+    // Play rocket sound
+    this.sound.play('rocket', { volume: 0.4 })
+
+    // Create effects for both rockets
+    const x1 = firstCell.column * CELL_SIZE + CELL_SIZE / 2
+    const y1 = firstCell.row * CELL_SIZE + CELL_SIZE / 2
+    this.createPowerUpEffect(x1, y1, 'horizontal-rocket', firstCell)
+
+    const x2 = secondCell.column * CELL_SIZE + CELL_SIZE / 2
+    const y2 = secondCell.row * CELL_SIZE + CELL_SIZE / 2
+    this.createPowerUpEffect(x2, y2, 'vertical-rocket', secondCell)
+
+    // Clear both powerup properties
+    firstCell.powerup = null
+    secondCell.powerup = null
+
+    // Mark both cells for destruction
+    this.markCellForDestructionImmediate(firstCell)
+    this.markCellForDestructionImmediate(secondCell)
+
+    // Destroy entire row (from first rocket)
+    for (let col = 0; col < size; col++) {
+      const targetCell = this.board[firstCell.row][col]
+      if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
+        console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+        this.triggerPowerUp(targetCell)
+      } else {
+        this.markCellForDestructionImmediate(targetCell)
+      }
+    }
+
+    // Destroy entire column (from second rocket)
+    for (let row = 0; row < size; row++) {
+      const targetCell = this.board[row][secondCell.column]
+      if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
+        console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+        this.triggerPowerUp(targetCell)
+      } else {
+        this.markCellForDestructionImmediate(targetCell)
+      }
+    }
+  }
+
   findBestFlyAwayTarget (fromCell: Cell, targetedCells?: Set<Cell>): Cell | null {
     // Find the cell with the most matches (best strategic value)
     // Exclude cells that are already targeted by other fly-aways
@@ -1402,6 +1512,7 @@ export default class GameScene extends Phaser.Scene {
         cell.color = Phaser.Math.RND.pick(levelGems)
         cell.empty = false
         cell.powerup = null
+        cell.markedForDestruction = false
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = (row - numberOfEmptyCells) * CELL_SIZE + CELL_SIZE / 2
@@ -1410,6 +1521,23 @@ export default class GameScene extends Phaser.Scene {
           .setInteractive({ draggable: true })
       }
     }
+
+    // Safeguard: Ensure all non-empty, non-powerup cells have sprites
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (!cell.empty && !cell.powerup && !cell.sprite) {
+          console.warn(`[REFILL] Cell [${row},${col}] is non-empty but has no sprite! Creating sprite for ${cell.color}`)
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+          cell.markedForDestruction = false
+        }
+      }
+    }
+
     await this.moveSpritesWhereTheyBelong()
   }
 
@@ -1796,13 +1924,22 @@ export default class GameScene extends Phaser.Scene {
           console.log('\n🔵 BEFORE POWER-UP TRIGGER (swap):')
           this.logBoard()
 
-          if (firstCell.powerup) {
-            console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
-            this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
-          }
-          if (secondCell.powerup) {
-            console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
-            this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
+          // Special combination: Two vertical rockets
+          if (firstCell.powerup === 'vertical-rocket' && secondCell.powerup === 'vertical-rocket') {
+            this.triggerVerticalRocketCombo(firstCell, secondCell)
+          } else if (firstCell.powerup === 'horizontal-rocket' && secondCell.powerup === 'horizontal-rocket') {
+            // Special combination: Two horizontal rockets
+            this.triggerHorizontalRocketCombo(firstCell, secondCell)
+          } else {
+            // Normal power-up activation
+            if (firstCell.powerup) {
+              console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
+              this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
+            }
+            if (secondCell.powerup) {
+              console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
+              this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
+            }
           }
 
           console.log('\n🟡 AFTER POWER-UP TRIGGER (swap, before destroy/fall/refill):')
@@ -2062,6 +2199,96 @@ export default class GameScene extends Phaser.Scene {
       this.spawnPowerup('tnt', 4, 4)
       console.log(`[DEBUG] Loaded ${name} with TNT at center [4, 4]`)
       console.log('[DEBUG] Click the TNT to test blast radius (should destroy 2 cells in each direction)')
+      return
+    }
+
+    if (name === 'vertical-rocket-combo') {
+      // Load a simple test board for vertical rocket combo testing
+      const verticalRocketComboBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = verticalRocketComboBoard[row][col]
+
+          // Destroy existing sprite if it exists
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn two vertical rockets vertically adjacent to each other (one on top of the other)
+      this.spawnPowerup('vertical-rocket', 3, 4)
+      this.spawnPowerup('vertical-rocket', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with 2 vertical rockets at [3,4] and [4,4]`)
+      console.log('[DEBUG] Drag one vertical rocket onto the other to test the combo')
+      console.log('[DEBUG] Expected: One clears column 4, the other clears row where dropped')
+      return
+    }
+
+    if (name === 'horizontal-rocket-combo') {
+      // Load a simple test board for horizontal rocket combo testing
+      const horizontalRocketComboBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = horizontalRocketComboBoard[row][col]
+
+          // Destroy existing sprite if it exists
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn two horizontal rockets horizontally adjacent to each other (side by side)
+      this.spawnPowerup('horizontal-rocket', 4, 3)
+      this.spawnPowerup('horizontal-rocket', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with 2 horizontal rockets at [4,3] and [4,4]`)
+      console.log('[DEBUG] Drag one horizontal rocket onto the other to test the combo')
+      console.log('[DEBUG] Expected: One clears row 4, the other clears column where dropped')
       return
     }
 
