@@ -174,7 +174,8 @@ export class LevelSystem {
 
   /**
    * Generate a power-up creation challenge
-   * Balanced with move count: Easy=2 powerups/20 moves, Medium=4 powerups/25 moves, Hard=6 powerups/30 moves
+   * Balanced with move count: Easy=1 powerup/20 moves, Medium=2 powerups/25 moves, Hard=3 powerups/30 moves
+   * Note: Creating powerups is very difficult, especially Color Bombs (5 in a row)
    */
   private static generatePowerUpCreateChallenge(difficulty: Difficulty): Challenge {
     const powerUp = this.POWER_UP_TYPES[Math.floor(Math.random() * this.POWER_UP_TYPES.length)]
@@ -182,13 +183,13 @@ export class LevelSystem {
 
     switch (difficulty) {
       case 'easy':
-        targetValue = 2  // 20 moves
+        targetValue = 1  // 20 moves
         break
       case 'medium':
-        targetValue = 4  // 25 moves
+        targetValue = 2  // 25 moves
         break
       case 'hard':
-        targetValue = 6  // 30 moves
+        targetValue = 3  // 30 moves
         break
     }
 
