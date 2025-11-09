@@ -96,6 +96,11 @@ export class PowerUpSystem {
         // Check if all 4 cells match and aren't empty or power-ups
         if (allNotEmpty && noPowerups && colorsMatch) {
           console.log(`[2x2 FOUND] ✓ 2x2 square detected at [${row},${col}] with color ${topLeft.color}!`)
+
+          // Expand the 2x2 to include all adjacent same-colored gems
+          const expandedCells = this.expandSquarePattern(board, squareCells, topLeft.color)
+          console.log(`[2x2 EXPANDED] Expanded from 4 cells to ${expandedCells.length} cells`)
+
           // Found a 2x2 square! Position fly-away based on swap direction
           let flyAwayCell = topLeft // default to top-left
 
@@ -134,7 +139,7 @@ export class PowerUpSystem {
           patterns.push({
             cell: flyAwayCell,
             type: 'fly-away',
-            cells: squareCells,
+            cells: expandedCells,  // Use expanded cells instead of just the 2x2
             priority: 2
           })
         }
@@ -505,5 +510,46 @@ export class PowerUpSystem {
     // Pick from top candidates with some randomness
     const topCandidates = candidates.slice(0, Math.min(5, candidates.length))
     return topCandidates[Math.floor(Math.random() * topCandidates.length)].cell
+  }
+
+  /**
+   * Expand a 2x2 square pattern to include all adjacent same-colored gems
+   * Uses flood-fill algorithm to find connected gems
+   */
+  expandSquarePattern(board: Cell[][], squareCells: Cell[], color: string): Cell[] {
+    const visited = new Set<Cell>()
+    const expanded: Cell[] = []
+    const queue: Cell[] = [...squareCells]
+
+    // Add initial square cells to visited
+    squareCells.forEach(cell => visited.add(cell))
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      expanded.push(current)
+
+      // Check all 4 adjacent cells
+      const neighbors = [
+        current.row > 0 ? board[current.row - 1][current.column] : null,  // Up
+        current.row < size - 1 ? board[current.row + 1][current.column] : null,  // Down
+        current.column > 0 ? board[current.row][current.column - 1] : null,  // Left
+        current.column < size - 1 ? board[current.row][current.column + 1] : null  // Right
+      ].filter(n => n !== null) as Cell[]
+
+      for (const neighbor of neighbors) {
+        // Include if same color, not empty, not a powerup, and not visited
+        if (
+          !visited.has(neighbor) &&
+          !neighbor.empty &&
+          !neighbor.powerup &&
+          neighbor.color === color
+        ) {
+          visited.add(neighbor)
+          queue.push(neighbor)
+        }
+      }
+    }
+
+    return expanded
   }
 }

@@ -124,7 +124,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.captureMove(fromRow, fromCol, toRow, toCol, expectedBehavior) - Bug reporting tool')
       console.log('[DEBUG] Keyboard shortcuts:')
       console.log('  - U or Z: Undo last move')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo')
     }
 
     this.createBackground()
@@ -3000,6 +3000,20 @@ export default class GameScene extends Phaser.Scene {
         ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
         ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
         ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ],
+      // Test 2x2 expansion: Swap blue [1,0] with red [1,1] to create 2x2
+      // Should expand to include all 5 adjacent red gems (3 on top + 2x2 = 5 total)
+      // Pattern: R R R
+      //          R R
+      'square-expand': [
+        ['red', 'red', 'red', 'green', 'yellow', 'pink', 'blue', 'green'],
+        ['blue', 'red', 'yellow', 'green', 'yellow', 'green', 'green', 'yellow'],
+        ['green', 'yellow', 'pink', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'blue', 'green', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'blue', 'red', 'green', 'yellow', 'pink', 'blue'],
+        ['blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink'],
+        ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
+        ['pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow']
       ],
       match4h: [
         ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'pink'],
