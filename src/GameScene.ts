@@ -795,9 +795,11 @@ export default class GameScene extends Phaser.Scene {
       this.resetCombo()
 
       // Check level completion after all cascades settle
+      this.checkLevelCompletion()
+
+      // Don't check for "no more moves" if game is over
       if (this.moves <= 0) {
-        this.checkLevelCompletion()
-        return  // Don't check for "no more moves" if game is over
+        return
       }
 
       const winningMoves = this.getWinningMoves()
@@ -2348,9 +2350,7 @@ export default class GameScene extends Phaser.Scene {
           this.resetCombo()
 
           // Check level completion after all cascades settle
-          if (this.moves <= 0) {
-            this.checkLevelCompletion()
-          }
+          this.checkLevelCompletion()
 
           this.moveInProgress = false
           this.updateDebugDisplay()
@@ -2543,12 +2543,17 @@ export default class GameScene extends Phaser.Scene {
           this.resetCombo()
 
           // Check level completion after all cascades settle
+          this.checkLevelCompletion()
+
+          // Don't check for "no more moves" if game is over
           if (this.moves <= 0) {
-            this.checkLevelCompletion()
             this.moveInProgress = false
             this.updateDebugDisplay()
-            return  // Don't check for "no more moves" if game is over
+            return
           }
+
+          this.moveInProgress = false
+          this.updateDebugDisplay()
 
           const winningMoves = this.getWinningMoves()
           console.log(`${winningMoves.length} winning moves`)
