@@ -10,6 +10,8 @@ export default class MenuScene extends Phaser.Scene {
   levelLabel: Phaser.GameObjects.Text
   livesLabel: Phaser.GameObjects.Text
   livesValue: Phaser.GameObjects.Text
+  hammersLabel: Phaser.GameObjects.Text
+  hammersButton: Phaser.GameObjects.Text
   scoreLabel: Phaser.GameObjects.Text
   scoreValue: Phaser.GameObjects.Text
   movesLabel: Phaser.GameObjects.Text
@@ -65,8 +67,39 @@ export default class MenuScene extends Phaser.Scene {
       .setFontStyle('bold')
       .setOrigin(0, 0)
 
+    // Hammers display and button
+    this.hammersLabel = this.add.text(15, 80, 'Hammers')
+      .setFontFamily('Arial')
+      .setFontSize(14)
+      .setColor('#FFD700')
+      .setAlign('left')
+      .setFontStyle('bold')
+      .setOrigin(0, 0)
+
+    this.hammersButton = this.add.text(15, 97, `🔨 ${LevelSystem.getHammers()}`)
+      .setFontFamily('Arial')
+      .setFontSize(16)
+      .setColor('#8B4513')
+      .setAlign('left')
+      .setFontStyle('bold')
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => {
+        if (LevelSystem.getHammers() > 0) {
+          this.registry.events.emit('HAMMER_ACTIVATED')
+        }
+      })
+      .on('pointerover', () => {
+        if (LevelSystem.getHammers() > 0) {
+          this.hammersButton.setColor('#CD853F')
+        }
+      })
+      .on('pointerout', () => {
+        this.hammersButton.setColor('#8B4513')
+      })
+
     // Score display - left-aligned with smaller text
-    this.scoreLabel = this.add.text(15, 85, 'Score')
+    this.scoreLabel = this.add.text(15, 125, 'Score')
       .setFontFamily('Arial')
       .setFontSize(16)
       .setColor('#FFD700')
@@ -74,7 +107,7 @@ export default class MenuScene extends Phaser.Scene {
       .setFontStyle('bold')
       .setOrigin(0, 0)
 
-    this.scoreValue = this.add.text(15, 105, '0')
+    this.scoreValue = this.add.text(15, 145, '0')
       .setFontFamily('Arial')
       .setFontSize(20)
       .setColor('white')
@@ -83,7 +116,7 @@ export default class MenuScene extends Phaser.Scene {
       .setOrigin(0, 0)
 
     // Moves display - left-aligned with smaller text
-    this.movesLabel = this.add.text(15, 135, 'Moves')
+    this.movesLabel = this.add.text(15, 175, 'Moves')
       .setFontFamily('Arial')
       .setFontSize(16)
       .setColor('#FFD700')
@@ -91,7 +124,7 @@ export default class MenuScene extends Phaser.Scene {
       .setFontStyle('bold')
       .setOrigin(0, 0)
 
-    this.movesValue = this.add.text(15, 155, levelConfig.moves.toString())
+    this.movesValue = this.add.text(15, 195, levelConfig.moves.toString())
       .setFontFamily('Arial')
       .setFontSize(20)
       .setColor('white')
@@ -100,7 +133,7 @@ export default class MenuScene extends Phaser.Scene {
       .setOrigin(0, 0)
 
     // Compact button text
-    this.newGameButton = this.add.text(15, 185, 'New Game')
+    this.newGameButton = this.add.text(15, 225, 'New Game')
       .setFontFamily('Arial')
       .setFontSize(14)
       .setColor('#4da6ff')
@@ -117,7 +150,7 @@ export default class MenuScene extends Phaser.Scene {
         this.newGameButton.setColor('#4da6ff')
       })
 
-    this.leaderboardButton = this.add.text(15, 210, 'Leaderboard')
+    this.leaderboardButton = this.add.text(15, 250, 'Leaderboard')
       .setFontFamily('Arial')
       .setFontSize(14)
       .setColor('#4da6ff')
@@ -168,6 +201,12 @@ export default class MenuScene extends Phaser.Scene {
     this.registry.events.on('changedata', this.updateData, this)
     this.registry.events.on('CHALLENGE_UPDATED', this.onChallengeUpdated, this)
     this.registry.events.on('LIVES_UPDATED', this.onLivesUpdated, this)
+    this.registry.events.on('HAMMERS_UPDATED', this.onHammersUpdated, this)
+  }
+
+  onHammersUpdated () {
+    const hammers = LevelSystem.getHammers()
+    this.hammersButton.setText(`🔨 ${hammers}`)
   }
 
   onLivesUpdated () {

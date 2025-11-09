@@ -57,6 +57,7 @@ export default class GameScene extends Phaser.Scene {
   comboText: Phaser.GameObjects.Text | null
   comboContainer: Phaser.GameObjects.Container | null
   winningMovesCache: { hash: string, moves: { cell1: Cell, cell2: Cell }[] } | null
+  hammerModeActive: boolean
 
   constructor () {
     super({
@@ -124,7 +125,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.captureMove(fromRow, fromCol, toRow, toCol, expectedBehavior) - Bug reporting tool')
       console.log('[DEBUG] Keyboard shortcuts:')
       console.log('  - U or Z: Undo last move')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, hammer-test')
     }
 
     this.createBackground()
@@ -168,6 +169,9 @@ export default class GameScene extends Phaser.Scene {
     // Initialize winning moves cache
     this.winningMovesCache = null
 
+    // Initialize hammer mode
+    this.hammerModeActive = false
+
     // Expose debug commands to console (always available)
     this.exposeDebugCommands()
 
@@ -185,6 +189,10 @@ export default class GameScene extends Phaser.Scene {
 
     this.registry.events.on('NEW_GAME', () => {
       this.handleStartNewGame()
+    })
+
+    this.registry.events.on('HAMMER_ACTIVATED', () => {
+      this.activateHammerMode()
     })
   }
 
@@ -669,6 +677,38 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Activate hammer mode - allows player to click any gem to destroy it
+   */
+  activateHammerMode () {
+    if (LevelSystem.getHammers() <= 0) {
+      console.log('[HAMMER] No hammers available')
+      return
+    }
+
+    if (this.isGameOver) {
+      console.log('[HAMMER] Cannot use hammer when game is over')
+      return
+    }
+
+    console.log('[HAMMER] Hammer mode activated - click a gem to destroy it')
+    this.hammerModeActive = true
+
+    // Change cursor to crosshair to indicate hammer mode
+    this.input.setDefaultCursor('crosshair')
+  }
+
+  /**
+   * Deactivate hammer mode
+   */
+  deactivateHammerMode () {
+    console.log('[HAMMER] Hammer mode deactivated')
+    this.hammerModeActive = false
+
+    // Reset cursor to default
+    this.input.setDefaultCursor('default')
+  }
+
+  /**
    * Retry current level with a life
    */
   retryLevel () {
@@ -712,6 +752,82 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const pointedCell = this.getCellAt(pointer)
+
+    // Handle hammer mode - click to destroy a gem
+    if (this.hammerModeActive) {
+      if (!pointedCell || pointedCell.empty) {
+        console.log('[HAMMER] Invalid cell - click a gem to destroy it')
+        return
+      }
+
+      console.log(`[HAMMER] Destroying cell at (${pointedCell.row}, ${pointedCell.column})`)
+
+      // Use a hammer from inventory
+      if (!LevelSystem.useHammer()) {
+        console.log('[HAMMER] Failed to use hammer - none available')
+        this.deactivateHammerMode()
+        return
+      }
+
+      // Update hammer counter in MenuScene
+      this.registry.events.emit('HAMMERS_UPDATED')
+
+      // Deactivate hammer mode
+      this.deactivateHammerMode()
+
+      // Mark cell for destruction
+      this.markCellForDestructionImmediate(pointedCell)
+
+      // Play destruction sound
+      this.sound.play('explode', { volume: 0.5 })
+
+      // Set move in progress to prevent other actions
+      this.moveInProgress = true
+
+      // Execute destruction and cascade
+      await this.destroyCells()
+      await this.makeCellsFall()
+      await this.refillBoard()
+
+      // Handle cascades if there are matches
+      let cascades = 0
+      while (MatchDetector.boardShouldExplode(this.board) || this.powerUpSystem.hasSpecialPatterns(this.board)) {
+        const chains = MatchDetector.getExplodingChains(this.board)
+
+        // Track challenge progress for matched gems
+        this.updateChallengeForMatches(chains)
+
+        // Create power-ups from chains
+        this.powerUpSystem.createPowerUpsFromChains(
+          this.board,
+          chains,
+          (type) => this.updateChallengeForPowerUp(type),
+          null
+        )
+
+        // Show floating score text
+        this.showFloatingScores(chains, cascades)
+
+        await this.destroyCells()
+        this.addScore(this.computeScore(chains, cascades))
+        await this.makeCellsFall()
+        await this.refillBoard()
+
+        cascades++
+        this.updateComboDisplay(cascades + 1)
+      }
+
+      // Reset combo after cascades finish
+      this.resetCombo()
+
+      // Check level completion
+      this.checkLevelCompletion()
+
+      // Move complete
+      this.moveInProgress = false
+
+      return
+    }
 
     // Note: Power-ups can no longer be activated by direct click
     // They MUST be swapped/dragged to activate, giving players strategic control
@@ -911,10 +1027,15 @@ export default class GameScene extends Phaser.Scene {
   gameOver (message: string = 'Game Over', isLevelComplete: boolean = false, canRetry: boolean = false) {
     this.isGameOver = true
 
-    // If level complete, advance to next level
+    // If level complete, advance to next level and award hammer
     if (isLevelComplete) {
       const nextLevel = LevelSystem.advanceLevel()
       console.log(`Level complete! Advanced to level ${nextLevel}`)
+
+      // Award 1 hammer for completing the level
+      const hammers = LevelSystem.addHammers(1)
+      console.log(`[HAMMER] Earned 1 hammer! Total: ${hammers}`)
+      this.registry.events.emit('HAMMERS_UPDATED')
     }
 
     // Only update personal best on game over (not level complete)
@@ -3007,6 +3128,50 @@ export default class GameScene extends Phaser.Scene {
       console.log(`[DEBUG] Loaded ${name} with 2 horizontal rockets at [4,3] and [4,4]`)
       console.log('[DEBUG] Drag one horizontal rocket onto the other to test the combo')
       console.log('[DEBUG] Expected: One clears row 4, the other clears column where dropped')
+      return
+    }
+
+    if (name === 'hammer-test') {
+      // Load a test board for hammer testing with some hard-to-reach gems
+      const hammerTestBoard = [
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue'],
+        ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'],
+        ['green', 'green', 'green', 'green', 'green', 'green', 'green', 'green'],
+        ['yellow', 'yellow', 'yellow', 'yellow', 'yellow', 'yellow', 'yellow', 'yellow'],
+        ['pink', 'pink', 'pink', 'pink', 'pink', 'pink', 'pink', 'pink'],
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue'],
+        ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'],
+        ['green', 'green', 'green', 'green', 'green', 'green', 'green', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = hammerTestBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Give the player 3 hammers to test with
+      LevelSystem.addHammers(3)
+      this.registry.events.emit('HAMMERS_UPDATED')
+
+      console.log(`[DEBUG] Loaded ${name} with 3 hammers`)
+      console.log('[DEBUG] This board has no easy matches - use the hammer to break the deadlock')
+      console.log('[DEBUG] Click the hammer icon in the menu, then click any gem to destroy it')
       return
     }
 
