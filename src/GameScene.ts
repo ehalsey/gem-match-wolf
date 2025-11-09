@@ -1774,20 +1774,34 @@ export default class GameScene extends Phaser.Scene {
     for (const cell of targetCells) {
       cell.powerup = 'fly-away'
 
-      // Update sprite with proper display size
-      cell.sprite.setTexture('fly-away')
-        .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
-
-      // Create spawn animation
+      // Update sprite texture and size
       const x = cell.column * CELL_SIZE + CELL_SIZE / 2
       const y = cell.row * CELL_SIZE + CELL_SIZE / 2
 
-      cell.sprite.setScale(0)
+      cell.sprite.setTexture('fly-away')
+        .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+        .setAlpha(0)
+
+      // Fade in and pop animation using alpha instead of scale
       this.tweens.add({
         targets: cell.sprite,
-        scale: 1,
-        duration: 300,
-        ease: 'Back.easeOut'
+        alpha: 1,
+        duration: 200,
+        ease: 'Power2'
+      })
+
+      // Add a bounce effect using displaySize
+      const originalSize = CELL_SIZE * 0.9
+      this.tweens.add({
+        targets: cell.sprite,
+        displayWidth: CELL_SIZE * 1.1,
+        displayHeight: CELL_SIZE * 1.1,
+        duration: 150,
+        ease: 'Back.easeOut',
+        yoyo: true,
+        onComplete: () => {
+          cell.sprite.setDisplaySize(originalSize, originalSize)
+        }
       })
 
       // Spawn particles
