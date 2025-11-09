@@ -7,7 +7,7 @@ import { CELL_SIZE, NUMBER_OF_CELLS_PER_ROW as size } from '../constants'
  *
  * Power-up Priority System:
  * 4 - Color Bomb (light-ball): 5+ linear match - most powerful, clears all gems of target color
- * 3 - TNT: L-shapes and rectangles (3x2, 2x3) - area damage in 2-cell radius
+ * 3 - TNT: T-shapes, L-shapes, and rectangles (3x2, 2x3) - area damage in 2-cell radius
  * 2 - Fly-away: 2x2 squares - flies to random gem and explodes
  * 1 - Rockets: 4-match linear (horizontal/vertical) - clears entire row or column
  */
@@ -137,6 +137,78 @@ export class PowerUpSystem {
             cells: squareCells,
             priority: 2
           })
+        }
+      }
+    }
+
+    // Detect T-shapes for TNT (all 4 orientations) (Priority: 3)
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const center = board[row][col]
+        if (center.empty || center.powerup) continue
+
+        // T-shape 1: T pointing down (3 across + 2 down from center)
+        // Pattern: X X X
+        //            X
+        //            X
+        if (col >= 1 && col <= size - 2 && row <= size - 3) {
+          const left = board[row][col - 1]
+          const right = board[row][col + 1]
+          const down1 = board[row + 1][col]
+          const down2 = board[row + 2][col]
+          const tCells = [center, left, right, down1, down2]
+
+          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
+          }
+        }
+
+        // T-shape 2: T pointing up (3 across + 2 up from center)
+        // Pattern:   X
+        //            X
+        //          X X X
+        if (col >= 1 && col <= size - 2 && row >= 2) {
+          const left = board[row][col - 1]
+          const right = board[row][col + 1]
+          const up1 = board[row - 1][col]
+          const up2 = board[row - 2][col]
+          const tCells = [center, left, right, up1, up2]
+
+          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
+          }
+        }
+
+        // T-shape 3: T pointing right (3 down + 2 right from center)
+        // Pattern: X X X
+        //          X
+        //          X
+        if (row >= 1 && row <= size - 2 && col <= size - 3) {
+          const up = board[row - 1][col]
+          const down = board[row + 1][col]
+          const right1 = board[row][col + 1]
+          const right2 = board[row][col + 2]
+          const tCells = [center, up, down, right1, right2]
+
+          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
+          }
+        }
+
+        // T-shape 4: T pointing left (3 down + 2 left from center)
+        // Pattern: X X X
+        //              X
+        //              X
+        if (row >= 1 && row <= size - 2 && col >= 2) {
+          const up = board[row - 1][col]
+          const down = board[row + 1][col]
+          const left1 = board[row][col - 1]
+          const left2 = board[row][col - 2]
+          const tCells = [center, up, down, left1, left2]
+
+          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+            patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
+          }
         }
       }
     }

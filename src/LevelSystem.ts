@@ -11,7 +11,6 @@ export type Difficulty = 'easy' | 'medium' | 'hard'
 
 export type ChallengeType =
   | 'color-match'      // Match X gems of a specific color
-  | 'score-target'     // Reach target score
   | 'power-up-create'  // Create X power-ups of a type
 
 export interface Challenge {
@@ -34,6 +33,7 @@ export interface LevelConfig {
 export class LevelSystem {
   private static readonly STORAGE_KEY = 'gem-match-current-level'
   private static readonly LIVES_KEY = 'gem-match-lives'
+  private static readonly SCORE_KEY = 'gem-match-cumulative-score'
   private static readonly MAX_LIVES = 5
 
   // Difficulty rotation pattern: Easy, Easy, Medium, Easy, Hard, Easy (repeat)
@@ -42,9 +42,9 @@ export class LevelSystem {
   ]
 
   private static readonly DIFFICULTY_MOVES = {
-    easy: 40,
-    medium: 30,
-    hard: 20
+    easy: 20,
+    medium: 25,
+    hard: 30
   }
 
   private static readonly GEM_COLORS = ['red', 'blue', 'green', 'yellow', 'pink']
@@ -119,26 +119,26 @@ export class LevelSystem {
 
   /**
    * Generate a challenge based on difficulty
+   * Score is always tracked but is NOT a win condition - only challenges matter
    */
   static generateChallenge(difficulty: Difficulty): Challenge {
-    // Choose challenge type based on difficulty
-    const challengeTypes: ChallengeType[] = ['color-match', 'score-target', 'power-up-create']
+    // Choose between color-match and power-up-create (no score targets)
+    const challengeTypes: ChallengeType[] = ['color-match', 'power-up-create']
     const randomType = challengeTypes[Math.floor(Math.random() * challengeTypes.length)]
 
     switch (randomType) {
       case 'color-match':
         return this.generateColorMatchChallenge(difficulty)
-      case 'score-target':
-        return this.generateScoreTargetChallenge(difficulty)
       case 'power-up-create':
         return this.generatePowerUpCreateChallenge(difficulty)
       default:
-        return this.generateScoreTargetChallenge(difficulty)
+        return this.generateColorMatchChallenge(difficulty)
     }
   }
 
   /**
    * Generate a color-match challenge
+   * Balanced with move count: Easy=15 gems/20 moves, Medium=30 gems/25 moves, Hard=50 gems/30 moves
    */
   private static generateColorMatchChallenge(difficulty: Difficulty): Challenge {
     const color = this.GEM_COLORS[Math.floor(Math.random() * this.GEM_COLORS.length)]
@@ -146,13 +146,13 @@ export class LevelSystem {
 
     switch (difficulty) {
       case 'easy':
-        targetValue = 15
+        targetValue = 15  // 20 moves
         break
       case 'medium':
-        targetValue = 25
+        targetValue = 30  // 25 moves
         break
       case 'hard':
-        targetValue = 35
+        targetValue = 50  // 30 moves
         break
     }
 
@@ -166,33 +166,14 @@ export class LevelSystem {
   }
 
   /**
-   * Generate a score-target challenge
+   * Generate a score-target challenge (REMOVED - score is not a win condition)
+   * Score is always tracked for leaderboards but doesn't determine level completion
    */
-  private static generateScoreTargetChallenge(difficulty: Difficulty): Challenge {
-    let targetValue: number
-
-    switch (difficulty) {
-      case 'easy':
-        targetValue = 3000
-        break
-      case 'medium':
-        targetValue = 5000
-        break
-      case 'hard':
-        targetValue = 7000
-        break
-    }
-
-    return {
-      type: 'score-target',
-      description: `Reach ${targetValue} points`,
-      targetValue,
-      currentValue: 0
-    }
-  }
+  // Removed: Score targets are no longer used as challenges
 
   /**
    * Generate a power-up creation challenge
+   * Balanced with move count: Easy=2 powerups/20 moves, Medium=4 powerups/25 moves, Hard=6 powerups/30 moves
    */
   private static generatePowerUpCreateChallenge(difficulty: Difficulty): Challenge {
     const powerUp = this.POWER_UP_TYPES[Math.floor(Math.random() * this.POWER_UP_TYPES.length)]
@@ -200,13 +181,13 @@ export class LevelSystem {
 
     switch (difficulty) {
       case 'easy':
-        targetValue = 2
+        targetValue = 2  // 20 moves
         break
       case 'medium':
-        targetValue = 3
+        targetValue = 4  // 25 moves
         break
       case 'hard':
-        targetValue = 5
+        targetValue = 6  // 30 moves
         break
     }
 
@@ -267,6 +248,39 @@ export class LevelSystem {
   static reset(): void {
     this.setCurrentLevel(1)
     this.resetLives()
+    this.resetScore()
+  }
+
+  /**
+   * Get cumulative score across all levels
+   */
+  static getScore(): number {
+    const stored = localStorage.getItem(this.SCORE_KEY)
+    return stored ? parseInt(stored, 10) : 0
+  }
+
+  /**
+   * Set cumulative score
+   */
+  static setScore(score: number): void {
+    localStorage.setItem(this.SCORE_KEY, score.toString())
+  }
+
+  /**
+   * Add to cumulative score
+   */
+  static addScore(points: number): number {
+    const currentScore = this.getScore()
+    const newScore = currentScore + points
+    this.setScore(newScore)
+    return newScore
+  }
+
+  /**
+   * Reset score to 0 (only on new game)
+   */
+  static resetScore(): void {
+    this.setScore(0)
   }
 
   /**
