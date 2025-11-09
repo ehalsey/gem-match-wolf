@@ -1727,6 +1727,88 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  async triggerFlyAwayFlyAwayCombo (firstCell: Cell, secondCell: Cell): Promise<void> {
+    console.log('🚁🚁 FLY-AWAY + FLY-AWAY COMBO! CREATE 3 FLY-AWAYS!')
+
+    // Play sounds
+    this.sound.play('rocket', { volume: 0.5 })
+
+    // Clear both powerup properties and mark for destruction
+    firstCell.powerup = null
+    secondCell.powerup = null
+    this.markCellForDestructionImmediate(firstCell)
+    this.markCellForDestructionImmediate(secondCell)
+
+    // Create particles at both cells
+    for (const cell of [firstCell, secondCell]) {
+      const x = cell.column * CELL_SIZE + CELL_SIZE / 2
+      const y = cell.row * CELL_SIZE + CELL_SIZE / 2
+      const particles = this.add.particles(x, y, 'particle', {
+        speed: { min: 50, max: 150 },
+        scale: { start: 0.6, end: 0 },
+        alpha: { start: 1, end: 0 },
+        lifespan: 400,
+        quantity: 20,
+        tint: 0x00ffff,
+        blendMode: 'ADD'
+      })
+      this.time.delayedCall(500, () => particles.destroy())
+    }
+
+    // Find 3 random valid cells to place new fly-aways
+    const validCells: Cell[] = []
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (!cell.empty && !cell.powerup && cell !== firstCell && cell !== secondCell) {
+          validCells.push(cell)
+        }
+      }
+    }
+
+    // Shuffle and take 3 random cells
+    const shuffled = validCells.sort(() => Math.random() - 0.5)
+    const targetCells = shuffled.slice(0, 3)
+
+    // Convert each target cell into a Fly-Away
+    for (const cell of targetCells) {
+      cell.powerup = 'fly-away'
+
+      // Update sprite
+      cell.sprite.setTexture('fly-away')
+
+      // Create spawn animation
+      const x = cell.column * CELL_SIZE + CELL_SIZE / 2
+      const y = cell.row * CELL_SIZE + CELL_SIZE / 2
+
+      cell.sprite.setScale(0)
+      this.tweens.add({
+        targets: cell.sprite,
+        scale: 1,
+        duration: 300,
+        ease: 'Back.easeOut'
+      })
+
+      // Spawn particles
+      const spawnParticles = this.add.particles(x, y, 'particle', {
+        speed: { min: 30, max: 80 },
+        scale: { start: 0.5, end: 0 },
+        alpha: { start: 1, end: 0 },
+        lifespan: 300,
+        quantity: 15,
+        tint: 0x00ffff,
+        blendMode: 'ADD'
+      })
+      this.time.delayedCall(400, () => spawnParticles.destroy())
+    }
+
+    // Increment power-up challenge counter if applicable
+    if (this.currentChallenge.type === 'power-up-create' && this.currentChallenge.powerUpType === 'fly-away') {
+      this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, 3)
+      this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+    }
+  }
+
   findBestFlyAwayTarget (fromCell: Cell, targetedCells?: Set<Cell>): Cell | null {
     // Find the cell with the most matches (best strategic value)
     // Exclude cells that are already targeted by other fly-aways
@@ -2452,6 +2534,10 @@ export default class GameScene extends Phaser.Scene {
             const flyAway = p1 === 'fly-away' ? firstCell : secondCell
             const lightBall = p1 === 'fly-away' ? secondCell : firstCell
             await this.triggerFlyAwayLightBallCombo(flyAway, lightBall)
+          }
+          // Two Fly-Aways = Create 3 Fly-Aways
+          else if (p1 === 'fly-away' && p2 === 'fly-away') {
+            await this.triggerFlyAwayFlyAwayCombo(firstCell, secondCell)
           }
           // Two vertical rockets
           else if (p1 === 'vertical-rocket' && p2 === 'vertical-rocket') {
