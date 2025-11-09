@@ -3375,8 +3375,9 @@ export default class GameScene extends Phaser.Scene {
         ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
         ['pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow']
       ],
+      // Horizontal 4-match test: Swap red [0,3] with blue [0,4] to create horizontal rocket
       match4h: [
-        ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['blue', 'blue', 'blue', 'red', 'blue', 'green', 'yellow', 'pink'],
         ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
         ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
         ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
@@ -3385,12 +3386,13 @@ export default class GameScene extends Phaser.Scene {
         ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
         ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
+      // Vertical 4-match test: Swap green [3,0] with red [4,0] to create vertical rocket
       match4v: [
         ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
         ['red', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
         ['red', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
-        ['pink', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['green', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['red', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
         ['yellow', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
         ['blue', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
         ['yellow', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow']
