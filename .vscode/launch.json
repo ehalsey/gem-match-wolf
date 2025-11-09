@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Game (Chrome)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:8000",
+            "webRoot": "${workspaceFolder}",
+            "sourceMaps": true,
+            "preLaunchTask": "npm: dev",
+            "serverReadyAction": {
+                "pattern": "webpack compiled",
+                "uriFormat": "http://localhost:8000",
+                "action": "debugWithChrome"
+            }
+        },
+        {
+            "name": "Launch Game (Edge)",
+            "type": "msedge",
+            "request": "launch",
+            "url": "http://localhost:8000",
+            "webRoot": "${workspaceFolder}",
+            "sourceMaps": true,
+            "preLaunchTask": "npm: dev",
+            "serverReadyAction": {
+                "pattern": "webpack compiled",
+                "uriFormat": "http://localhost:8000",
+                "action": "debugWithEdge"
+            }
+        },
+        {
+            "name": "Attach to Azure Functions",
+            "type": "node",
+            "request": "attach",
+            "restart": true,
+            "port": 9229,
+            "preLaunchTask": "func: host start"
+        }
+    ]
+}
