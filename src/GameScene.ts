@@ -1774,8 +1774,9 @@ export default class GameScene extends Phaser.Scene {
     for (const cell of targetCells) {
       cell.powerup = 'fly-away'
 
-      // Update sprite
+      // Update sprite with proper display size
       cell.sprite.setTexture('fly-away')
+        .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
 
       // Create spawn animation
       const x = cell.column * CELL_SIZE + CELL_SIZE / 2
