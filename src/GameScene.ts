@@ -125,7 +125,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.captureMove(fromRow, fromCol, toRow, toCol, expectedBehavior) - Bug reporting tool')
       console.log('[DEBUG] Keyboard shortcuts:')
       console.log('  - U or Z: Undo last move')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, hammer-test')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, hammer-test, level5-snapshot')
     }
 
     this.createBackground()
@@ -3128,6 +3128,55 @@ export default class GameScene extends Phaser.Scene {
       console.log(`[DEBUG] Loaded ${name} with 2 horizontal rockets at [4,3] and [4,4]`)
       console.log('[DEBUG] Drag one horizontal rocket onto the other to test the combo')
       console.log('[DEBUG] Expected: One clears row 4, the other clears column where dropped')
+      return
+    }
+
+    if (name === 'level5-snapshot') {
+      // Load a test board matching the Level 5 screenshot with powerups
+      const level5Board = [
+        ['blue', 'red', 'blue', 'yellow', 'blue', 'blue', 'yellow', 'blue'],
+        ['red', 'blue', 'red', 'green', 'blue', 'blue', 'green', 'yellow'],
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'green'],
+        ['blue', 'blue', 'blue', 'yellow', 'blue', 'green', 'yellow', 'yellow'],
+        ['red', 'yellow', 'blue', 'green', 'blue', 'blue', 'blue', 'red'],
+        ['blue', 'blue', 'red', 'blue', 'blue', 'blue', 'red', 'yellow'],
+        ['blue', 'blue', 'blue', 'yellow', 'red', 'blue', 'green', 'red'],
+        ['blue', 'blue', 'blue', 'green', 'blue', 'blue', 'yellow', 'blue']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = level5Board[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, cell.color)
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Add the vertical rocket at row 2, col 4
+      this.spawnPowerup('vertical-rocket', 2, 4)
+
+      // Add the light-ball (color bomb) at row 5, col 5
+      this.spawnPowerup('light-ball', 5, 5)
+
+      // Give the player 4 hammers to match the screenshot
+      LevelSystem.setHammers(4)
+      this.registry.events.emit('HAMMERS_UPDATED')
+
+      console.log(`[DEBUG] Loaded ${name} matching Level 5 screenshot`)
+      console.log('[DEBUG] Vertical rocket at [2,4], Light-ball at [5,5], 4 hammers')
       return
     }
 
