@@ -121,18 +121,18 @@ export class LevelSystem {
    * Generate a challenge based on difficulty
    * Score is always tracked but is NOT a win condition - only challenges matter
    */
-  static generateChallenge(difficulty: Difficulty): Challenge {
+  static generateChallenge(difficulty: Difficulty, gemTypes: string[]): Challenge {
     // Choose between color-match and power-up-create (no score targets)
     const challengeTypes: ChallengeType[] = ['color-match', 'power-up-create']
     const randomType = challengeTypes[Math.floor(Math.random() * challengeTypes.length)]
 
     switch (randomType) {
       case 'color-match':
-        return this.generateColorMatchChallenge(difficulty)
+        return this.generateColorMatchChallenge(difficulty, gemTypes)
       case 'power-up-create':
         return this.generatePowerUpCreateChallenge(difficulty)
       default:
-        return this.generateColorMatchChallenge(difficulty)
+        return this.generateColorMatchChallenge(difficulty, gemTypes)
     }
   }
 
@@ -140,8 +140,9 @@ export class LevelSystem {
    * Generate a color-match challenge
    * Balanced with move count: Easy=50 gems/20 moves, Medium=65 gems/25 moves, Hard=85 gems/30 moves
    */
-  private static generateColorMatchChallenge(difficulty: Difficulty): Challenge {
-    const color = this.GEM_COLORS[Math.floor(Math.random() * this.GEM_COLORS.length)]
+  private static generateColorMatchChallenge(difficulty: Difficulty, gemTypes: string[]): Challenge {
+    // Pick a color from the available gem types on the board
+    const color = gemTypes[Math.floor(Math.random() * gemTypes.length)]
     let targetValue: number
 
     switch (difficulty) {
@@ -206,8 +207,8 @@ export class LevelSystem {
   static getLevelConfig(level: number): LevelConfig {
     const difficulty = this.getDifficultyForLevel(level)
     const moves = this.getMovesForDifficulty(difficulty)
-    const challenge = this.generateChallenge(difficulty)
     const gemTypes = this.getGemTypesForDifficulty(difficulty)
+    const challenge = this.generateChallenge(difficulty, gemTypes)
 
     return {
       level,
