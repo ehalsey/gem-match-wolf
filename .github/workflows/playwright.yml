@@ -1,10 +1,10 @@
 name: Playwright E2E
 
 on:
-  push:
-    branches: [ '**' ]
   pull_request:
     branches: [ '**' ]
+  push:
+    branches: [ 'master' ]
 
 jobs:
   test:
