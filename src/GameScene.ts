@@ -1783,7 +1783,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   async triggerFlyAwayLightBallCombo (flyAwayCell: Cell, lightBallCell: Cell): Promise<void> {
-    console.log('🚁⚡ FLY-AWAY + LIGHT BALL COMBO! MULTI-TARGET STRIKE!')
+    console.log('🚁⚡ FLY-AWAY + LIGHT BALL COMBO! FLY-AWAY DELIVERS COLOR BOMB!')
 
     // Play sounds
     this.sound.play('rocket', { volume: 0.5 })
@@ -1797,64 +1797,68 @@ export default class GameScene extends Phaser.Scene {
     this.markCellForDestructionImmediate(flyAwayCell)
     this.markCellForDestructionImmediate(lightBallCell)
 
-    // Find 3 best targets and strike them all
-    const targets: Cell[] = []
-    for (let i = 0; i < 3; i++) {
-      const usedCells = new Set(targets)
-      const target = this.findBestFlyAwayTarget(flyAwayCell, usedCells)
-      if (target) targets.push(target)
+    // Fly-away picks one random target
+    const target = this.findBestFlyAwayTarget(flyAwayCell, new Set())
+
+    if (!target) {
+      console.log('[FLY-AWAY + LIGHT-BALL] No valid target found')
+      return
     }
 
-    // Animate and destroy each target with enhanced effects
-    for (const target of targets) {
-      const startX = flyAwayCell.column * CELL_SIZE + CELL_SIZE / 2
-      const startY = flyAwayCell.row * CELL_SIZE + CELL_SIZE / 2
-      const endX = target.column * CELL_SIZE + CELL_SIZE / 2
-      const endY = target.row * CELL_SIZE + CELL_SIZE / 2
+    console.log(`[FLY-AWAY + LIGHT-BALL] Delivering color bomb to [${target.row}, ${target.column}] (${target.color})`)
 
-      // Create flying sprite
-      const flyingSprite = this.add.sprite(startX, startY, 'fly-away')
-        .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
-        .setDepth(2000)
-        .setTint(0xff00ff) // Purple tint for combo
+    const startX = flyAwayCell.column * CELL_SIZE + CELL_SIZE / 2
+    const startY = flyAwayCell.row * CELL_SIZE + CELL_SIZE / 2
+    const endX = target.column * CELL_SIZE + CELL_SIZE / 2
+    const endY = target.row * CELL_SIZE + CELL_SIZE / 2
 
-      // Quick flight animation
-      await new Promise<void>(resolve => {
-        this.tweens.add({
-          targets: flyingSprite,
-          x: endX,
-          y: endY,
-          angle: 720,
-          duration: 600,
-          ease: 'Cubic.easeInOut',
-          onComplete: () => {
-            // Create explosion
-            const particles = this.add.particles(endX, endY, 'particle', {
-              speed: { min: 100, max: 200 },
-              scale: { start: 0.8, end: 0 },
-              alpha: { start: 1, end: 0 },
-              lifespan: 600,
-              quantity: 30,
-              tint: 0xff00ff,
-              blendMode: 'ADD'
-            })
-            this.time.delayedCall(700, () => particles.destroy())
+    // Create flying color bomb sprite
+    const flyingSprite = this.add.sprite(startX, startY, 'light-ball')
+      .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+      .setDepth(2000)
+      .setTint(0xff00ff) // Purple tint for combo
 
-            // Destroy target and surrounding cells
-            for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
-              const targetRow = target.row + dir.dr
-              const targetCol = target.column + dir.dc
-              if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
-                this.markCellForDestructionImmediate(this.board[targetRow][targetCol])
-              }
-            }
-            this.markCellForDestructionImmediate(target)
-
-            flyingSprite.destroy()
-            resolve()
-          }
-        })
+    // Flight animation
+    await new Promise<void>(resolve => {
+      this.tweens.add({
+        targets: flyingSprite,
+        x: endX,
+        y: endY,
+        angle: 720,
+        duration: 600,
+        ease: 'Cubic.easeInOut',
+        onComplete: () => {
+          flyingSprite.destroy()
+          resolve()
+        }
       })
+    })
+
+    // Color bomb activates at the target location
+    // Destroy all gems of the target's color
+    const targetColor = target.color
+    console.log(`[FLY-AWAY + LIGHT-BALL] Color bomb explodes at target! Destroying all ${targetColor} gems`)
+
+    // Create massive explosion at target
+    const particles = this.add.particles(endX, endY, 'particle', {
+      speed: { min: 200, max: 400 },
+      scale: { start: 1.2, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 800,
+      quantity: 50,
+      tint: 0xffffff,
+      blendMode: 'ADD'
+    })
+    this.time.delayedCall(900, () => particles.destroy())
+
+    // Destroy all gems of the target's color across the entire board
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (!cell.empty && cell.color === targetColor) {
+          this.markCellForDestructionImmediate(cell)
+        }
+      }
     }
   }
 
