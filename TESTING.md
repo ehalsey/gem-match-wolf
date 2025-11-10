@@ -124,13 +124,13 @@ The console will output a complete bug report template with before/after states 
 1. Visit: `http://localhost:8000/?board=match4h`
 2. Swap red at [0,3] with blue at [0,4]
 3. Observe: 4 blues in a row → creates Horizontal Rocket at swap position
-4. Swap the rocket to activate and see horizontal line clear
+4. Swap the rocket to activate and see horizontal line clear with wave effect (destroys outward from center)
 
 ### Test Vertical Rocket (4-Match Vertical)
 1. Visit: `http://localhost:8000/?board=match4v`
 2. Swap green at [3,0] with red at [4,0]
 3. Observe: 4 reds in a column → creates Vertical Rocket at swap position
-4. Swap the rocket to activate and see vertical column clear
+4. Swap the rocket to activate and see vertical column clear with wave effect (destroys outward from center)
 
 ### Test Light Ball (5-Match)
 1. Visit: `http://localhost:8000/?board=match5`
@@ -239,6 +239,8 @@ If you prefer to capture state manually:
 - **Infinite Testing**: Debug mode disables "no more moves" game over, so you can keep testing even without valid moves
 - **Bug Reporting**: Use `gameDebug.captureMove()` for instant bug reports with before/after state
 - **Production Safety**: Debug features only work in development, won't affect deployed game
+- **Visual Effects**: Scores fly to the scoreboard, and rocket blasts animate outward in waves from the source
+- **Slow Motion**: Use `?speed=0.5` to slow down all animations for easier observation
 
 ## Common Test Cases
 

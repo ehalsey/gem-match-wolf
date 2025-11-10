@@ -172,8 +172,8 @@ export default class GameScene extends Phaser.Scene {
     this.levelConfig = LevelSystem.getCurrentLevelConfig()
     this.currentChallenge = { ...this.levelConfig.challenge }  // Clone the challenge
 
-    // Load cumulative score from storage (score persists across levels)
-    this.setScore(LevelSystem.getScore())
+    // Load level score (resets each level)
+    this.setScore(LevelSystem.getLevelScore())
     this.setMoves(this.levelConfig.moves)
 
     // Notify MenuScene of initial challenge state
@@ -244,7 +244,7 @@ export default class GameScene extends Phaser.Scene {
     this.currentChallenge = { ...this.levelConfig.challenge }
 
     // Score already reset to 0 by LevelSystem.reset()
-    this.setScore(LevelSystem.getScore())
+    this.setScore(LevelSystem.getLevelScore())
     this.setMoves(this.levelConfig.moves)
 
     // Notify MenuScene of challenge reset and lives update
@@ -270,8 +270,8 @@ export default class GameScene extends Phaser.Scene {
     this.levelConfig = LevelSystem.getCurrentLevelConfig()
     this.currentChallenge = { ...this.levelConfig.challenge }
 
-    // Keep cumulative score
-    this.setScore(LevelSystem.getScore())
+    // Load level score (already reset to 0 in gameOver)
+    this.setScore(LevelSystem.getLevelScore())
     this.setMoves(this.levelConfig.moves)
 
     // Notify MenuScene of new challenge and level
@@ -387,15 +387,17 @@ export default class GameScene extends Phaser.Scene {
     this.score = score
     this.registry.set('score', score)
     // Score is tracked for leaderboards but is NOT a challenge win condition
-    // Also persist to storage for cumulative scoring
-    LevelSystem.setScore(score)
+    // This now tracks level score (resets each level)
+    LevelSystem.setLevelScore(score)
   }
 
   addScore (points: number) {
-    // Add points to cumulative score and update local variable
-    const newScore = LevelSystem.addScore(points)
-    this.score = newScore
-    this.registry.set('score', newScore)
+    // Add points to both level score and cumulative score
+    const newLevelScore = LevelSystem.addLevelScore(points)
+    LevelSystem.addScore(points)  // Also update cumulative all-time score
+
+    this.score = newLevelScore
+    this.registry.set('score', newLevelScore)
   }
 
   setMoves (moves: number) {
@@ -474,14 +476,16 @@ export default class GameScene extends Phaser.Scene {
     const background = this.comboContainer.getAt(0) as Phaser.GameObjects.Arc
     background.setFillStyle(backgroundColor, 0.8)
 
-    // Show and pulse animation
+    // Show and pulse animation - hold for longer visibility
     this.tweens.add({
       targets: this.comboContainer,
       alpha: 1,
       scale: 1.2,
-      duration: 200,
+      duration: this.duration(300),
       yoyo: true,
-      ease: 'Back.easeOut'
+      ease: 'Back.easeOut',
+      hold: this.duration(800), // Hold at peak scale for better visibility
+      repeat: 0
     })
 
     // Create particle burst effect
@@ -861,7 +865,7 @@ export default class GameScene extends Phaser.Scene {
         await this.refillBoard()
 
         cascades++
-        this.updateComboDisplay(cascades + 1)
+        this.updateComboDisplay(cascades)
       }
 
       // Reset combo after cascades finish
@@ -1006,7 +1010,7 @@ export default class GameScene extends Phaser.Scene {
         cascades++
 
         // Update combo display
-        this.updateComboDisplay(cascades + 1)
+        this.updateComboDisplay(cascades)
       }
 
       // Reset combo after cascades finish
@@ -1107,6 +1111,9 @@ export default class GameScene extends Phaser.Scene {
     if (isLevelComplete) {
       const nextLevel = LevelSystem.advanceLevel()
       console.log(`Level complete! Advanced to level ${nextLevel}`)
+
+      // Reset level score for the new level
+      LevelSystem.resetLevelScore()
 
       // Award 1 hammer for completing the level
       const hammers = LevelSystem.addHammers(1)
@@ -1291,7 +1298,7 @@ export default class GameScene extends Phaser.Scene {
         strokeColor = '#006600'
       }
 
-      // Create floating score text
+      // Create floating score text (high depth so it floats over everything including the menu)
       const scoreText = this.add.text(x, y, `+${chainScore}`, {
         fontSize: '32px',
         fontFamily: 'Arial',
@@ -1301,7 +1308,7 @@ export default class GameScene extends Phaser.Scene {
         strokeThickness: 4
       })
         .setOrigin(0.5)
-        .setDepth(100)
+        .setDepth(10000)
 
       // Show multiplier if > 1x
       if (multiplier > 1) {
@@ -1314,7 +1321,7 @@ export default class GameScene extends Phaser.Scene {
           strokeThickness: 3
         })
           .setOrigin(0.5)
-          .setDepth(100)
+          .setDepth(10000)
 
         // Animate multiplier text with score
         this.tweens.add({
@@ -1341,14 +1348,26 @@ export default class GameScene extends Phaser.Scene {
         this.time.delayedCall(600, () => particles.destroy())
       }
 
-      // Animate: float up and fade out with scale
+      // Emit event to MenuScene to create flying score (so it renders over the menu)
+      const gameSceneX = x + MENU_WIDTH  // Convert to screen space (GameScene camera is offset by MENU_WIDTH)
+      this.registry.events.emit('SCORE_FLYOUT', {
+        startX: gameSceneX,
+        startY: y,
+        score: chainScore,
+        color: scoreColor,
+        strokeColor: strokeColor,
+        multiplier: multiplier,
+        gameSpeed: this.gameSpeed
+      })
+
+      // Animate: pop up and fade (stays in game area briefly before MenuScene takes over)
       this.tweens.add({
         targets: scoreText,
-        y: y - 80,
+        y: y - 30,
+        scale: multiplier > 1 ? 1.3 : 1.2,
         alpha: 0,
-        scale: multiplier > 1 ? 1.3 : 1,
-        duration: 1500,
-        ease: 'Cubic.easeOut',
+        duration: this.duration(400),
+        ease: 'Back.easeOut',
         onComplete: () => scoreText.destroy()
       })
     }
@@ -1427,22 +1446,54 @@ export default class GameScene extends Phaser.Scene {
     // Also chain-activate any power-ups we hit
     switch (powerUpType) {
       case 'horizontal-rocket':
-        // Destroy entire row
+        // Destroy row in waves radiating outward from source
         let horizontalChallengeCount = 0
-        for (let col = 0; col < size; col++) {
-          const targetCell = this.board[cell.row][col]
-          // Chain-activate any power-ups in the row
-          if (targetCell.powerup && targetCell !== cell) {
-            console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-            await this.triggerPowerUp(targetCell, undefined, targetedCells)
+        const maxDistanceLeft = cell.column
+        const maxDistanceRight = size - 1 - cell.column
+        const maxHorizontalDistance = Math.max(maxDistanceLeft, maxDistanceRight)
+
+        // Process each distance level sequentially
+        for (let distance = 0; distance <= maxHorizontalDistance; distance++) {
+          const cellsAtDistance: Cell[] = []
+
+          // Add cells at this distance (left and/or right)
+          if (distance === 0) {
+            // Center cell (the rocket itself)
+            cellsAtDistance.push(cell)
           } else {
-            // Count toward challenge if this is the challenge color
-            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
-              horizontalChallengeCount++
+            // Left cell
+            const leftCol = cell.column - distance
+            if (leftCol >= 0) {
+              cellsAtDistance.push(this.board[cell.row][leftCol])
             }
-            this.markCellForDestructionImmediate(targetCell)
+            // Right cell
+            const rightCol = cell.column + distance
+            if (rightCol < size) {
+              cellsAtDistance.push(this.board[cell.row][rightCol])
+            }
+          }
+
+          // Process all cells at this distance
+          for (const targetCell of cellsAtDistance) {
+            if (targetCell.powerup && targetCell !== cell) {
+              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+              await this.triggerPowerUp(targetCell, undefined, targetedCells)
+            } else {
+              if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                horizontalChallengeCount++
+              }
+              this.markCellForDestructionImmediate(targetCell)
+            }
+          }
+
+          // Add delay between distance levels (except after the last one)
+          if (distance < maxHorizontalDistance) {
+            await new Promise<void>(resolve => {
+              this.time.delayedCall(this.duration(80), () => resolve())
+            })
           }
         }
+
         // Update challenge progress
         if (horizontalChallengeCount > 0 && this.currentChallenge) {
           console.log(`[CHALLENGE] Horizontal rocket destroyed ${horizontalChallengeCount} ${this.currentChallenge.color} gems`)
@@ -1452,22 +1503,54 @@ export default class GameScene extends Phaser.Scene {
         break
 
       case 'vertical-rocket':
-        // Destroy entire column
+        // Destroy column in waves radiating outward from source
         let verticalChallengeCount = 0
-        for (let row = 0; row < size; row++) {
-          const targetCell = this.board[row][cell.column]
-          // Chain-activate any power-ups in the column
-          if (targetCell.powerup && targetCell !== cell) {
-            console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-            await this.triggerPowerUp(targetCell, undefined, targetedCells)
+        const maxDistanceUp = cell.row
+        const maxDistanceDown = size - 1 - cell.row
+        const maxVerticalDistance = Math.max(maxDistanceUp, maxDistanceDown)
+
+        // Process each distance level sequentially
+        for (let distance = 0; distance <= maxVerticalDistance; distance++) {
+          const cellsAtDistance: Cell[] = []
+
+          // Add cells at this distance (up and/or down)
+          if (distance === 0) {
+            // Center cell (the rocket itself)
+            cellsAtDistance.push(cell)
           } else {
-            // Count toward challenge if this is the challenge color
-            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
-              verticalChallengeCount++
+            // Up cell
+            const upRow = cell.row - distance
+            if (upRow >= 0) {
+              cellsAtDistance.push(this.board[upRow][cell.column])
             }
-            this.markCellForDestructionImmediate(targetCell)
+            // Down cell
+            const downRow = cell.row + distance
+            if (downRow < size) {
+              cellsAtDistance.push(this.board[downRow][cell.column])
+            }
+          }
+
+          // Process all cells at this distance
+          for (const targetCell of cellsAtDistance) {
+            if (targetCell.powerup && targetCell !== cell) {
+              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+              await this.triggerPowerUp(targetCell, undefined, targetedCells)
+            } else {
+              if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                verticalChallengeCount++
+              }
+              this.markCellForDestructionImmediate(targetCell)
+            }
+          }
+
+          // Add delay between distance levels (except after the last one)
+          if (distance < maxVerticalDistance) {
+            await new Promise<void>(resolve => {
+              this.time.delayedCall(this.duration(80), () => resolve())
+            })
           }
         }
+
         // Update challenge progress
         if (verticalChallengeCount > 0 && this.currentChallenge) {
           console.log(`[CHALLENGE] Vertical rocket destroyed ${verticalChallengeCount} ${this.currentChallenge.color} gems`)
@@ -2428,10 +2511,9 @@ export default class GameScene extends Phaser.Scene {
       // Create particle explosion
       this.createGemParticles(cell)
 
-      // Simple pop: scale up slightly and fade out quickly
+      // Simple fade out (no scaling)
       this.tweens.add({
         targets: cell.sprite,
-        scale: 1.3,
         alpha: 0,
         duration: this.duration(destroyDuration),
         ease: 'Cubic.easeOut',
@@ -2671,7 +2753,7 @@ export default class GameScene extends Phaser.Scene {
             cascades++
 
             // Update combo display
-            this.updateComboDisplay(cascades + 1)
+            this.updateComboDisplay(cascades)
           }
 
           // Reset combo after cascades finish
@@ -2823,7 +2905,7 @@ export default class GameScene extends Phaser.Scene {
             cascades++
 
             // Update combo display
-            this.updateComboDisplay(cascades + 1)
+            this.updateComboDisplay(cascades)
           }
 
           // Then continue with regular cascade loop for any subsequent matches or special patterns
@@ -2868,7 +2950,7 @@ export default class GameScene extends Phaser.Scene {
             cascades++
 
             // Update combo display
-            this.updateComboDisplay(cascades + 1)
+            this.updateComboDisplay(cascades)
           }
 
           // Reset combo after cascades finish

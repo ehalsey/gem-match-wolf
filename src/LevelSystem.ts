@@ -36,8 +36,12 @@ export class LevelSystem {
   private static readonly STORAGE_KEY = 'gem-match-current-level'
   private static readonly LIVES_KEY = 'gem-match-lives'
   private static readonly SCORE_KEY = 'gem-match-cumulative-score'
+  private static readonly LEVEL_SCORE_KEY = 'gem-match-level-score'
+  private static readonly COINS_KEY = 'gem-match-coins'
   private static readonly HAMMERS_KEY = 'gem-match-hammers'
+  private static readonly LAST_LIFE_REGEN_KEY = 'gem-match-last-life-regen'
   private static readonly MAX_LIVES = 5
+  private static readonly LIFE_REGEN_INTERVAL_MS = 20 * 60 * 1000 // 20 minutes in milliseconds
 
   // Difficulty rotation pattern: Easy, Easy, Medium, Easy, Hard, Easy (repeat)
   private static readonly DIFFICULTY_PATTERN: Difficulty[] = [
@@ -254,7 +258,10 @@ export class LevelSystem {
     this.setCurrentLevel(1)
     this.resetLives()
     this.resetScore()
+    this.resetLevelScore()
+    this.resetCoins()
     this.resetHammers()
+    localStorage.removeItem(this.LAST_LIFE_REGEN_KEY)
   }
 
   /**
@@ -287,6 +294,82 @@ export class LevelSystem {
    */
   static resetScore(): void {
     this.setScore(0)
+  }
+
+  /**
+   * Get current level score (resets each level)
+   */
+  static getLevelScore(): number {
+    const stored = localStorage.getItem(this.LEVEL_SCORE_KEY)
+    return stored ? parseInt(stored, 10) : 0
+  }
+
+  /**
+   * Set level score
+   */
+  static setLevelScore(score: number): void {
+    localStorage.setItem(this.LEVEL_SCORE_KEY, score.toString())
+  }
+
+  /**
+   * Add to level score
+   */
+  static addLevelScore(points: number): number {
+    const currentScore = this.getLevelScore()
+    const newScore = currentScore + points
+    this.setLevelScore(newScore)
+    return newScore
+  }
+
+  /**
+   * Reset level score to 0 (at start of each level)
+   */
+  static resetLevelScore(): void {
+    this.setLevelScore(0)
+  }
+
+  /**
+   * Get current coins
+   */
+  static getCoins(): number {
+    const stored = localStorage.getItem(this.COINS_KEY)
+    return stored ? parseInt(stored, 10) : 0
+  }
+
+  /**
+   * Set coins
+   */
+  static setCoins(coins: number): void {
+    localStorage.setItem(this.COINS_KEY, Math.max(0, coins).toString())
+  }
+
+  /**
+   * Add coins
+   */
+  static addCoins(amount: number): number {
+    const currentCoins = this.getCoins()
+    const newCoins = currentCoins + amount
+    this.setCoins(newCoins)
+    return newCoins
+  }
+
+  /**
+   * Spend coins (returns false if insufficient)
+   */
+  static spendCoins(amount: number): boolean {
+    const currentCoins = this.getCoins()
+    if (currentCoins >= amount) {
+      this.setCoins(currentCoins - amount)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Reset coins to 0
+   */
+  static resetCoins(): void {
+    this.setCoins(0)
   }
 
   /**
@@ -326,6 +409,99 @@ export class LevelSystem {
    */
   static hasLivesRemaining(): boolean {
     return this.getLives() > 0
+  }
+
+  /**
+   * Process life regeneration based on time elapsed
+   * Call this when the game starts or when checking lives
+   * Returns number of lives regenerated
+   */
+  static processLifeRegeneration(): number {
+    const currentLives = this.getLives()
+
+    // If already at max lives, no regeneration needed
+    if (currentLives >= this.MAX_LIVES) {
+      return 0
+    }
+
+    const now = Date.now()
+    const lastRegenStr = localStorage.getItem(this.LAST_LIFE_REGEN_KEY)
+    const lastRegen = lastRegenStr ? parseInt(lastRegenStr, 10) : now
+
+    const timeSinceLastRegen = now - lastRegen
+    const livesToRegen = Math.floor(timeSinceLastRegen / this.LIFE_REGEN_INTERVAL_MS)
+
+    if (livesToRegen > 0) {
+      const newLives = Math.min(currentLives + livesToRegen, this.MAX_LIVES)
+      this.setLives(newLives)
+
+      // Update last regen time (accounting for any unused time)
+      const newLastRegen = lastRegen + (livesToRegen * this.LIFE_REGEN_INTERVAL_MS)
+      localStorage.setItem(this.LAST_LIFE_REGEN_KEY, newLastRegen.toString())
+
+      return livesToRegen
+    }
+
+    return 0
+  }
+
+  /**
+   * Get time in milliseconds until next life regenerates
+   * Returns 0 if at max lives
+   */
+  static getTimeUntilNextLife(): number {
+    const currentLives = this.getLives()
+
+    if (currentLives >= this.MAX_LIVES) {
+      return 0
+    }
+
+    const now = Date.now()
+    const lastRegenStr = localStorage.getItem(this.LAST_LIFE_REGEN_KEY)
+    const lastRegen = lastRegenStr ? parseInt(lastRegenStr, 10) : now
+
+    const timeSinceLastRegen = now - lastRegen
+    const timeUntilNext = this.LIFE_REGEN_INTERVAL_MS - (timeSinceLastRegen % this.LIFE_REGEN_INTERVAL_MS)
+
+    return timeUntilNext
+  }
+
+  /**
+   * Buy a single life with coins (10 coins)
+   * Returns false if insufficient coins or already at max lives
+   */
+  static buyLife(): boolean {
+    const currentLives = this.getLives()
+    if (currentLives >= this.MAX_LIVES) {
+      return false
+    }
+
+    if (this.spendCoins(10)) {
+      this.setLives(currentLives + 1)
+      // Reset regeneration timer since we manually added a life
+      localStorage.setItem(this.LAST_LIFE_REGEN_KEY, Date.now().toString())
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Refill all lives with coins (50 coins)
+   * Returns false if insufficient coins or already at max lives
+   */
+  static refillAllLives(): boolean {
+    const currentLives = this.getLives()
+    if (currentLives >= this.MAX_LIVES) {
+      return false
+    }
+
+    if (this.spendCoins(50)) {
+      this.setLives(this.MAX_LIVES)
+      // Reset regeneration timer
+      localStorage.setItem(this.LAST_LIFE_REGEN_KEY, Date.now().toString())
+      return true
+    }
+    return false
   }
 
   /**
@@ -370,5 +546,29 @@ export class LevelSystem {
    */
   static resetHammers(): void {
     this.setHammers(0)
+  }
+
+  /**
+   * Buy a hammer with coins (20 coins each)
+   * Returns false if insufficient coins
+   */
+  static buyHammer(): boolean {
+    if (this.spendCoins(20)) {
+      this.addHammers(1)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Buy 3 hammers with coins (50 coins - discounted)
+   * Returns false if insufficient coins
+   */
+  static buyHammerPack(): boolean {
+    if (this.spendCoins(50)) {
+      this.addHammers(3)
+      return true
+    }
+    return false
   }
 }
