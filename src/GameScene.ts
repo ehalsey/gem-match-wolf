@@ -108,12 +108,19 @@ export default class GameScene extends Phaser.Scene {
     this.testBoard = params.board
     this.gameSpeed = params.speed
 
-    // Set seed if provided
+    // Set seed - either from URL or generate random one
+    let seedValue: string
     if (params.seed) {
-      const seedValue = params.seed
-      Phaser.Math.RND.sow([seedValue])
-      console.log(`[DEBUG] Seed set to: ${seedValue}`)
+      seedValue = params.seed
+    } else {
+      // Generate random seed for reproducibility
+      seedValue = Math.floor(Math.random() * 1000000).toString()
     }
+    Phaser.Math.RND.sow([seedValue])
+
+    // Always log the seed so users can reproduce board states
+    console.log(`%c🎲 SEED: ${seedValue}`, 'font-weight: bold; font-size: 14px; color: #FFD700; background: #1a1a2e; padding: 4px 8px; border-radius: 4px;')
+    console.log(`   Reproduce this board: ?seed=${seedValue}`)
 
     // Log speed setting
     if (this.gameSpeed !== 1.0) {
