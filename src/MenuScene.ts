@@ -205,6 +205,24 @@ export default class MenuScene extends Phaser.Scene {
         this.leaderboardButton.setColor('#4da6ff')
       })
 
+    // Shop button
+    const shopButton = this.add.text(110, 290, '🏪 Shop')
+      .setFontFamily('Arial')
+      .setFontSize(14)
+      .setColor('#FFD700')
+      .setFontStyle('bold')
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => {
+        this.scene.launch('ShopScene')
+      })
+      .on('pointerover', () => {
+        shopButton.setColor('#ffffff')
+      })
+      .on('pointerout', () => {
+        shopButton.setColor('#FFD700')
+      })
+
     // Challenge display
     this.challengeLabel = this.add.text(15, 0, 'CHALLENGE')
       .setFontFamily('Arial')

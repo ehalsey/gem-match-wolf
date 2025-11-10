@@ -8,6 +8,7 @@ import GameScene from './GameScene'
 import MenuScene from './MenuScene'
 import LeaderboardScene from './LeaderboardScene'
 import LevelCompleteScene from './LevelCompleteScene'
+import ShopScene from './ShopScene'
 import { LevelSystem } from './LevelSystem'
 
 declare global {
@@ -22,7 +23,7 @@ const config: Phaser.Types.Core.GameConfig = {
   width: BOARD_SIZE + MENU_WIDTH,
   height: BOARD_SIZE,
   parent: document.getElementsByClassName('CanvasContainer')[0] as HTMLElement,
-  scene: [MenuScene, GameScene, LeaderboardScene, LevelCompleteScene]
+  scene: [MenuScene, GameScene, LeaderboardScene, LevelCompleteScene, ShopScene]
 }
 
 const game = new Phaser.Game(config)
