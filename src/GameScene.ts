@@ -53,6 +53,7 @@ export default class GameScene extends Phaser.Scene {
   comboContainer: Phaser.GameObjects.Container | null
   winningMovesCache: { hash: string, moves: { cell1: Cell, cell2: Cell }[] } | null
   hammerModeActive: boolean
+  gameSpeed: number
 
   constructor () {
     super({
@@ -64,10 +65,12 @@ export default class GameScene extends Phaser.Scene {
   // Parse URL parameters for testing
   getUrlParams () {
     const params = new URLSearchParams(window.location.search)
+    const speedParam = params.get('speed')
     return {
       seed: params.get('seed'),
       debug: params.get('debug') === 'true',
-      board: params.get('board')
+      board: params.get('board'),
+      speed: speedParam ? parseFloat(speedParam) : 1.0
     }
   }
 
@@ -103,12 +106,18 @@ export default class GameScene extends Phaser.Scene {
     const params = this.getUrlParams()
     this.debugMode = params.debug
     this.testBoard = params.board
+    this.gameSpeed = params.speed
 
     // Set seed if provided
     if (params.seed) {
       const seedValue = params.seed
       Phaser.Math.RND.sow([seedValue])
       console.log(`[DEBUG] Seed set to: ${seedValue}`)
+    }
+
+    // Log speed setting
+    if (this.gameSpeed !== 1.0) {
+      console.log(`[DEBUG] Game speed: ${this.gameSpeed}x (animations ${(1 / this.gameSpeed).toFixed(2)}x ${this.gameSpeed < 1 ? 'slower' : 'faster'})`)
     }
 
     // Log debug mode status
@@ -124,6 +133,11 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.captureMove(fromRow, fromCol, toRow, toCol, expectedBehavior) - Bug reporting tool')
       console.log('[DEBUG] Keyboard shortcuts:')
       console.log('  - U or Z: Undo last move')
+      console.log('[DEBUG] URL Parameters:')
+      console.log('  - ?speed=0.5 - Slow down animations (0.5 = half speed, 2.0 = double speed)')
+      console.log('  - ?debug=true - Enable debug mode')
+      console.log('  - ?board=match4h - Load test board')
+      console.log('  - ?seed=12345 - Set random seed')
       console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, hammer-test, level5-snapshot')
     }
 
@@ -308,6 +322,22 @@ export default class GameScene extends Phaser.Scene {
       return cell.powerup
     }
     return getGemSprite(cell.color)
+  }
+
+  /**
+   * Calculate animation duration adjusted for game speed
+   */
+  duration (baseDuration: number): number {
+    return baseDuration / this.gameSpeed
+  }
+
+  /**
+   * Debug log helper - only logs in debug mode
+   */
+  debugLog (message: string, ...args: any[]) {
+    if (this.debugMode) {
+      console.log(`[DEBUG] ${message}`, ...args)
+    }
   }
 
   initBoard () {
@@ -863,6 +893,11 @@ export default class GameScene extends Phaser.Scene {
 
     this.moveInProgress = true
 
+    this.debugLog('╔════════════════════════════════════════════════════════════╗')
+    this.debugLog('║                    SWAP STARTED                            ║')
+    this.debugLog('╚════════════════════════════════════════════════════════════╝')
+    this.debugLog(`Swapping [${firstCell.row},${firstCell.column}] (${firstCell.color}${firstCell.powerup ? `, ${firstCell.powerup}` : ''}) ↔ [${secondCell.row},${secondCell.column}] (${secondCell.color}${secondCell.powerup ? `, ${secondCell.powerup}` : ''})`)
+
     // Track the swap for smart power-up positioning (capture positions before swap)
     this.lastSwap = this.captureSwapContext(firstCell, secondCell)
 
@@ -871,21 +906,45 @@ export default class GameScene extends Phaser.Scene {
 
     await this.moveSpritesWhereTheyBelong()
 
-    // Check if either swapped cell is a power-up and activate it
+    // STEP 1: Check if swap creates a match (which should create a power-up FIRST)
+    const hasMatch = MatchDetector.boardShouldExplode(this.board)
+    const hasSpecialPattern = this.powerUpSystem.hasSpecialPatterns(this.board, this.lastSwap)
     const hasPowerUp = firstCell.powerup || secondCell.powerup
+
+    this.debugLog('After swap:', { hasMatch, hasSpecialPattern, hasPowerUp })
+
+    // STEP 2: If there's a match, create power-ups BEFORE triggering swapped power-ups
+    if (hasMatch || hasSpecialPattern) {
+      this.debugLog('→ Match detected! Creating power-ups BEFORE triggering swapped power-up...')
+
+      const chains = MatchDetector.getExplodingChains(this.board)
+      this.debugLog(`  Found ${chains.length} chains to match`)
+
+      // Create power-ups from the match
+      this.powerUpSystem.createPowerUpsFromChains(
+        this.board,
+        chains,
+        (type) => this.updateChallengeForPowerUp(type),
+        this.lastSwap
+      )
+      this.debugLog('  Power-ups created from match ✓')
+    }
+
+    // STEP 3: Now trigger the swapped power-up (if any)
     if (hasPowerUp) {
-      console.log('=== POWER-UP SWAPPED! ===')
+      this.debugLog('→ Triggering swapped power-up...')
       if (firstCell.powerup) {
-        console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
+        this.debugLog(`  Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
         this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
       }
       if (secondCell.powerup) {
-        console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
+        this.debugLog(`  Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
         this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
       }
       await this.destroyCells()
       await this.makeCellsFall()
       await this.refillBoard()
+      this.debugLog('  Swapped power-up completed ✓')
     }
 
     const hasSpecialPatterns = this.powerUpSystem.hasSpecialPatterns(this.board, this.lastSwap)
@@ -2069,7 +2128,7 @@ export default class GameScene extends Phaser.Scene {
 
               // Wait for destruction animations to complete using Promise
               await new Promise<void>(resolveDestruction => {
-                this.time.delayedCall(destroyDuration, () => resolveDestruction())
+                this.time.delayedCall(this.duration(destroyDuration), () => resolveDestruction())
               })
 
               // Now trigger the fall/refill/cascade logic
@@ -2290,7 +2349,7 @@ export default class GameScene extends Phaser.Scene {
             targets: sprite,
             x: expectedX,
             y: expectedY,
-            duration: swapDuration,
+            duration: this.duration(swapDuration),
             onComplete: () => resolve()
           })
         })
@@ -2367,7 +2426,7 @@ export default class GameScene extends Phaser.Scene {
         targets: cell.sprite,
         scale: 1.3,
         alpha: 0,
-        duration: destroyDuration,
+        duration: this.duration(destroyDuration),
         ease: 'Cubic.easeOut',
         onComplete: () => {
           // IMPORTANT: Destroy the sprite to prevent ghost gems
