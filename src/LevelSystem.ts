@@ -32,6 +32,15 @@ export interface LevelConfig {
   gemTypes: string[]  // Allowed gem colors for this level
 }
 
+export interface LevelResult {
+  level: number
+  score: number
+  stars: number
+  coinsEarned: number
+  isNewBest: boolean
+  previousBestScore: number
+}
+
 export class LevelSystem {
   private static readonly STORAGE_KEY = 'gem-match-current-level'
   private static readonly LIVES_KEY = 'gem-match-lives'
@@ -40,8 +49,29 @@ export class LevelSystem {
   private static readonly COINS_KEY = 'gem-match-coins'
   private static readonly HAMMERS_KEY = 'gem-match-hammers'
   private static readonly LAST_LIFE_REGEN_KEY = 'gem-match-last-life-regen'
+  private static readonly BEST_SCORES_KEY = 'gem-match-best-scores'
   private static readonly MAX_LIVES = 5
   private static readonly LIFE_REGEN_INTERVAL_MS = 20 * 60 * 1000 // 20 minutes in milliseconds
+
+  // Star thresholds as percentage of target scores
+  private static readonly STAR_THRESHOLDS = {
+    twoStar: 0.5,  // 50% of target score
+    threeStar: 0.8  // 80% of target score
+  }
+
+  // Target scores by difficulty (used for star calculation)
+  private static readonly TARGET_SCORES = {
+    easy: 3500,    // 20 moves
+    medium: 4500,  // 25 moves
+    hard: 5500     // 30 moves
+  }
+
+  // Coin rewards per star rating
+  private static readonly COIN_REWARDS = {
+    1: 10,
+    2: 25,
+    3: 50
+  }
 
   // Difficulty rotation pattern: Easy, Easy, Medium, Easy, Hard, Easy (repeat)
   private static readonly DIFFICULTY_PATTERN: Difficulty[] = [
@@ -570,5 +600,87 @@ export class LevelSystem {
       return true
     }
     return false
+  }
+
+  /**
+   * Calculate stars earned based on score and difficulty
+   * 1 star: Challenge complete (always awarded on level complete)
+   * 2 stars: Score >= 50% of target score for difficulty
+   * 3 stars: Score >= 80% of target score for difficulty
+   */
+  static calculateStars(score: number, difficulty: Difficulty): number {
+    const targetScore = this.TARGET_SCORES[difficulty]
+    const scorePercentage = score / targetScore
+
+    if (scorePercentage >= this.STAR_THRESHOLDS.threeStar) {
+      return 3
+    } else if (scorePercentage >= this.STAR_THRESHOLDS.twoStar) {
+      return 2
+    } else {
+      return 1  // Always get at least 1 star for completing the level
+    }
+  }
+
+  /**
+   * Get all best scores as a map of level -> score
+   */
+  static getBestScores(): Record<number, number> {
+    const stored = localStorage.getItem(this.BEST_SCORES_KEY)
+    return stored ? JSON.parse(stored) : {}
+  }
+
+  /**
+   * Get best score for a specific level
+   */
+  static getBestScoreForLevel(level: number): number {
+    const bestScores = this.getBestScores()
+    return bestScores[level] || 0
+  }
+
+  /**
+   * Update best score for a level if the new score is higher
+   * Returns true if this is a new best score
+   */
+  static updateBestScore(level: number, score: number): boolean {
+    const bestScores = this.getBestScores()
+    const previousBest = bestScores[level] || 0
+
+    if (score > previousBest) {
+      bestScores[level] = score
+      localStorage.setItem(this.BEST_SCORES_KEY, JSON.stringify(bestScores))
+      return true
+    }
+
+    return false
+  }
+
+  /**
+   * Calculate complete level result including stars and coin rewards
+   * This should be called when the player completes a level
+   */
+  static calculateLevelResult(level: number, score: number, difficulty: Difficulty): LevelResult {
+    const stars = this.calculateStars(score, difficulty)
+    const coinsEarned = this.COIN_REWARDS[stars as keyof typeof this.COIN_REWARDS]
+    const previousBestScore = this.getBestScoreForLevel(level)
+    const isNewBest = this.updateBestScore(level, score)
+
+    // Award the coins
+    this.addCoins(coinsEarned)
+
+    return {
+      level,
+      score,
+      stars,
+      coinsEarned,
+      isNewBest,
+      previousBestScore
+    }
+  }
+
+  /**
+   * Get target score for a difficulty level (used for star calculation)
+   */
+  static getTargetScore(difficulty: Difficulty): number {
+    return this.TARGET_SCORES[difficulty]
   }
 }

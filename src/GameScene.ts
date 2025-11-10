@@ -214,6 +214,10 @@ export default class GameScene extends Phaser.Scene {
     this.registry.events.on('HAMMER_ACTIVATED', () => {
       this.activateHammerMode()
     })
+
+    this.registry.events.on('LOAD_NEXT_LEVEL', () => {
+      this.loadNextLevel()
+    })
   }
 
   handleStartNewGame () {
@@ -1107,18 +1111,30 @@ export default class GameScene extends Phaser.Scene {
   gameOver (message: string = 'Game Over', isLevelComplete: boolean = false, canRetry: boolean = false) {
     this.isGameOver = true
 
-    // If level complete, advance to next level and award hammer
+    // If level complete, show new level complete screen with stars
     if (isLevelComplete) {
-      const nextLevel = LevelSystem.advanceLevel()
-      console.log(`Level complete! Advanced to level ${nextLevel}`)
+      const currentLevel = LevelSystem.getCurrentLevel()
+      const difficulty = this.levelConfig.difficulty
 
-      // Reset level score for the new level
-      LevelSystem.resetLevelScore()
+      // Calculate level result (stars, coins, etc.)
+      const result = LevelSystem.calculateLevelResult(currentLevel, this.score, difficulty)
+
+      console.log(`Level ${currentLevel} complete!`, result)
 
       // Award 1 hammer for completing the level
       const hammers = LevelSystem.addHammers(1)
       console.log(`[HAMMER] Earned 1 hammer! Total: ${hammers}`)
       this.registry.events.emit('HAMMERS_UPDATED')
+
+      // Advance to next level
+      LevelSystem.advanceLevel()
+
+      // Reset level score for the new level
+      LevelSystem.resetLevelScore()
+
+      // Launch level complete scene
+      this.scene.launch('LevelCompleteScene', { result })
+      return
     }
 
     // Only update personal best on game over (not level complete)
