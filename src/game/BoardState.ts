@@ -45,7 +45,8 @@ export class BoardState {
             color: '',
             sprite: null as any, // Will be set by GameScene
             empty: true,
-            powerup: null
+            powerup: null,
+            obstacleState: null
           }
         }
       }
@@ -247,7 +248,12 @@ export class BoardState {
             sprite: cell.sprite,
             empty: cell.empty,
             powerup: cell.powerup,
-            markedForDestruction: cell.markedForDestruction
+            markedForDestruction: cell.markedForDestruction,
+            obstacleState: cell.obstacleState ? {
+              type: cell.obstacleState.type,
+              durability: cell.obstacleState.durability,
+              properties: cell.obstacleState.properties ? { ...cell.obstacleState.properties } : undefined
+            } : null
           }
         }
       }
