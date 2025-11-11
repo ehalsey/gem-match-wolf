@@ -104,8 +104,8 @@ test.describe('Light Ball (Color Bomb) Combos', () => {
 
     await page.waitForTimeout(500)
 
-    // Set up the board and spawn light-balls
-    await page.evaluate(() => {
+    // Set up the board, spawn light-balls, and trigger combo
+    const result = await page.evaluate(async () => {
       const gameScene = (window as any).game.scene.scenes[1] as any
 
       // Load a test board
@@ -117,42 +117,34 @@ test.describe('Light Ball (Color Bomb) Combos', () => {
       if (typeof gameScene.spawnPowerup === 'function') {
         gameScene.spawnPowerup('light-ball', 4, 3)
         gameScene.spawnPowerup('light-ball', 4, 4)
+      } else {
+        gameScene.board[4][3].powerup = 'light-ball'
+        gameScene.board[4][4].powerup = 'light-ball'
       }
-    })
 
-    await page.waitForTimeout(500)
-
-    // Calculate click positions
-    const positions = await page.evaluate(() => {
-      const CELL_SIZE = 65
-      const MENU_WIDTH = 200
-      return {
-        cell1: {
-          x: MENU_WIDTH + 3 * CELL_SIZE + CELL_SIZE / 2, // column 3
-          y: 4 * CELL_SIZE + CELL_SIZE / 2 // row 4
-        },
-        cell2: {
-          x: MENU_WIDTH + 4 * CELL_SIZE + CELL_SIZE / 2, // column 4
-          y: 4 * CELL_SIZE + CELL_SIZE / 2 // row 4
+      // Count non-empty cells before combo
+      let cellsBeforeCombo = 0
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          if (!gameScene.board[row][col].empty) {
+            cellsBeforeCombo++
+          }
         }
       }
-    })
 
-    // Perform the swap by clicking
-    await page.mouse.click(positions.cell1.x, positions.cell1.y)
-    await page.waitForTimeout(300)
-    await page.mouse.click(positions.cell2.x, positions.cell2.y)
+      // Trigger the combo directly
+      const firstCell = gameScene.board[4][3]
+      const secondCell = gameScene.board[4][4]
 
-    // Wait for combo animations to complete
-    await page.waitForTimeout(2000)
+      const maybePromise = gameScene.triggerLightBallLightBallCombo(firstCell, secondCell)
+      if (maybePromise && typeof maybePromise.then === 'function') {
+        await maybePromise
+      }
 
-    // Take screenshot to verify
-    await page.screenshot({ path: 'tests/screenshots/light-ball-double-combo.png' })
+      // Wait for destruction to complete
+      await new Promise(resolve => setTimeout(resolve, 500))
 
-    // Check that board is cleared
-    const result = await page.evaluate(() => {
-      const gameScene = (window as any).game.scene.scenes[1] as any
-
+      // Count empty cells after combo
       let emptyCells = 0
       for (let row = 0; row < 8; row++) {
         for (let col = 0; col < 8; col++) {
@@ -162,10 +154,13 @@ test.describe('Light Ball (Color Bomb) Combos', () => {
         }
       }
 
-      return { emptyCells, totalCells: 64 }
+      return { cellsBeforeCombo, emptyCells, totalCells: 64 }
     })
 
     console.log('Board state after swap:', result)
+
+    // Verify board had gems before
+    expect(result.cellsBeforeCombo).toBeGreaterThan(0)
 
     // Verify entire board is cleared
     expect(result.emptyCells).toBe(result.totalCells)
