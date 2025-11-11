@@ -7,6 +7,8 @@
  * - Hard: 20 moves, tough challenges
  */
 
+import { getAllGemIds } from './GemConfig'
+
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
 export type ChallengeType =
@@ -30,11 +32,46 @@ export interface LevelConfig {
   gemTypes: string[]  // Allowed gem colors for this level
 }
 
+export interface LevelResult {
+  level: number
+  score: number
+  stars: number
+  coinsEarned: number
+  isNewBest: boolean
+  previousBestScore: number
+}
+
 export class LevelSystem {
   private static readonly STORAGE_KEY = 'gem-match-current-level'
   private static readonly LIVES_KEY = 'gem-match-lives'
   private static readonly SCORE_KEY = 'gem-match-cumulative-score'
+  private static readonly LEVEL_SCORE_KEY = 'gem-match-level-score'
+  private static readonly COINS_KEY = 'gem-match-coins'
+  private static readonly HAMMERS_KEY = 'gem-match-hammers'
+  private static readonly LAST_LIFE_REGEN_KEY = 'gem-match-last-life-regen'
+  private static readonly BEST_SCORES_KEY = 'gem-match-best-scores'
   private static readonly MAX_LIVES = 5
+  private static readonly LIFE_REGEN_INTERVAL_MS = 20 * 60 * 1000 // 20 minutes in milliseconds
+
+  // Star thresholds as percentage of target scores
+  private static readonly STAR_THRESHOLDS = {
+    twoStar: 0.5,  // 50% of target score
+    threeStar: 0.8  // 80% of target score
+  }
+
+  // Target scores by difficulty (used for star calculation)
+  private static readonly TARGET_SCORES = {
+    easy: 3500,    // 20 moves
+    medium: 4500,  // 25 moves
+    hard: 5500     // 30 moves
+  }
+
+  // Coin rewards per star rating
+  private static readonly COIN_REWARDS = {
+    1: 10,
+    2: 25,
+    3: 50
+  }
 
   // Difficulty rotation pattern: Easy, Easy, Medium, Easy, Hard, Easy (repeat)
   private static readonly DIFFICULTY_PATTERN: Difficulty[] = [
@@ -47,7 +84,7 @@ export class LevelSystem {
     hard: 30
   }
 
-  private static readonly GEM_COLORS = ['red', 'blue', 'green', 'yellow', 'pink']
+  private static readonly GEM_COLORS = getAllGemIds()
 
   private static readonly POWER_UP_TYPES = [
     { id: 'horizontal-rocket', name: 'Horizontal Rocket' },
@@ -138,7 +175,7 @@ export class LevelSystem {
 
   /**
    * Generate a color-match challenge
-   * Balanced with move count: Easy=50 gems/20 moves, Medium=65 gems/25 moves, Hard=85 gems/30 moves
+   * Balanced with move count: Easy=35 gems/20 moves, Medium=50 gems/25 moves, Hard=65 gems/30 moves
    */
   private static generateColorMatchChallenge(difficulty: Difficulty, gemTypes: string[]): Challenge {
     // Pick a color from the available gem types on the board
@@ -147,13 +184,13 @@ export class LevelSystem {
 
     switch (difficulty) {
       case 'easy':
-        targetValue = 50  // 20 moves (2.5 gems/move)
+        targetValue = 35  // 20 moves (1.75 gems/move)
         break
       case 'medium':
-        targetValue = 65  // 25 moves (2.6 gems/move)
+        targetValue = 50  // 25 moves (2.0 gems/move)
         break
       case 'hard':
-        targetValue = 85  // 30 moves (2.83 gems/move)
+        targetValue = 65  // 30 moves (2.17 gems/move)
         break
     }
 
@@ -251,6 +288,10 @@ export class LevelSystem {
     this.setCurrentLevel(1)
     this.resetLives()
     this.resetScore()
+    this.resetLevelScore()
+    this.resetCoins()
+    this.resetHammers()
+    localStorage.removeItem(this.LAST_LIFE_REGEN_KEY)
   }
 
   /**
@@ -283,6 +324,82 @@ export class LevelSystem {
    */
   static resetScore(): void {
     this.setScore(0)
+  }
+
+  /**
+   * Get current level score (resets each level)
+   */
+  static getLevelScore(): number {
+    const stored = localStorage.getItem(this.LEVEL_SCORE_KEY)
+    return stored ? parseInt(stored, 10) : 0
+  }
+
+  /**
+   * Set level score
+   */
+  static setLevelScore(score: number): void {
+    localStorage.setItem(this.LEVEL_SCORE_KEY, score.toString())
+  }
+
+  /**
+   * Add to level score
+   */
+  static addLevelScore(points: number): number {
+    const currentScore = this.getLevelScore()
+    const newScore = currentScore + points
+    this.setLevelScore(newScore)
+    return newScore
+  }
+
+  /**
+   * Reset level score to 0 (at start of each level)
+   */
+  static resetLevelScore(): void {
+    this.setLevelScore(0)
+  }
+
+  /**
+   * Get current coins
+   */
+  static getCoins(): number {
+    const stored = localStorage.getItem(this.COINS_KEY)
+    return stored ? parseInt(stored, 10) : 0
+  }
+
+  /**
+   * Set coins
+   */
+  static setCoins(coins: number): void {
+    localStorage.setItem(this.COINS_KEY, Math.max(0, coins).toString())
+  }
+
+  /**
+   * Add coins
+   */
+  static addCoins(amount: number): number {
+    const currentCoins = this.getCoins()
+    const newCoins = currentCoins + amount
+    this.setCoins(newCoins)
+    return newCoins
+  }
+
+  /**
+   * Spend coins (returns false if insufficient)
+   */
+  static spendCoins(amount: number): boolean {
+    const currentCoins = this.getCoins()
+    if (currentCoins >= amount) {
+      this.setCoins(currentCoins - amount)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Reset coins to 0
+   */
+  static resetCoins(): void {
+    this.setCoins(0)
   }
 
   /**
@@ -322,5 +439,248 @@ export class LevelSystem {
    */
   static hasLivesRemaining(): boolean {
     return this.getLives() > 0
+  }
+
+  /**
+   * Process life regeneration based on time elapsed
+   * Call this when the game starts or when checking lives
+   * Returns number of lives regenerated
+   */
+  static processLifeRegeneration(): number {
+    const currentLives = this.getLives()
+
+    // If already at max lives, no regeneration needed
+    if (currentLives >= this.MAX_LIVES) {
+      return 0
+    }
+
+    const now = Date.now()
+    const lastRegenStr = localStorage.getItem(this.LAST_LIFE_REGEN_KEY)
+    const lastRegen = lastRegenStr ? parseInt(lastRegenStr, 10) : now
+
+    const timeSinceLastRegen = now - lastRegen
+    const livesToRegen = Math.floor(timeSinceLastRegen / this.LIFE_REGEN_INTERVAL_MS)
+
+    if (livesToRegen > 0) {
+      const newLives = Math.min(currentLives + livesToRegen, this.MAX_LIVES)
+      this.setLives(newLives)
+
+      // Update last regen time (accounting for any unused time)
+      const newLastRegen = lastRegen + (livesToRegen * this.LIFE_REGEN_INTERVAL_MS)
+      localStorage.setItem(this.LAST_LIFE_REGEN_KEY, newLastRegen.toString())
+
+      return livesToRegen
+    }
+
+    return 0
+  }
+
+  /**
+   * Get time in milliseconds until next life regenerates
+   * Returns 0 if at max lives
+   */
+  static getTimeUntilNextLife(): number {
+    const currentLives = this.getLives()
+
+    if (currentLives >= this.MAX_LIVES) {
+      return 0
+    }
+
+    const now = Date.now()
+    const lastRegenStr = localStorage.getItem(this.LAST_LIFE_REGEN_KEY)
+    const lastRegen = lastRegenStr ? parseInt(lastRegenStr, 10) : now
+
+    const timeSinceLastRegen = now - lastRegen
+    const timeUntilNext = this.LIFE_REGEN_INTERVAL_MS - (timeSinceLastRegen % this.LIFE_REGEN_INTERVAL_MS)
+
+    return timeUntilNext
+  }
+
+  /**
+   * Buy a single life with coins (10 coins)
+   * Returns false if insufficient coins or already at max lives
+   */
+  static buyLife(): boolean {
+    const currentLives = this.getLives()
+    if (currentLives >= this.MAX_LIVES) {
+      return false
+    }
+
+    if (this.spendCoins(10)) {
+      this.setLives(currentLives + 1)
+      // Reset regeneration timer since we manually added a life
+      localStorage.setItem(this.LAST_LIFE_REGEN_KEY, Date.now().toString())
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Refill all lives with coins (50 coins)
+   * Returns false if insufficient coins or already at max lives
+   */
+  static refillAllLives(): boolean {
+    const currentLives = this.getLives()
+    if (currentLives >= this.MAX_LIVES) {
+      return false
+    }
+
+    if (this.spendCoins(50)) {
+      this.setLives(this.MAX_LIVES)
+      // Reset regeneration timer
+      localStorage.setItem(this.LAST_LIFE_REGEN_KEY, Date.now().toString())
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Get current hammers
+   */
+  static getHammers(): number {
+    const stored = localStorage.getItem(this.HAMMERS_KEY)
+    return stored ? parseInt(stored, 10) : 0
+  }
+
+  /**
+   * Set hammers
+   */
+  static setHammers(hammers: number): void {
+    localStorage.setItem(this.HAMMERS_KEY, hammers.toString())
+  }
+
+  /**
+   * Add hammers (earned from level completion)
+   */
+  static addHammers(count: number): number {
+    const currentHammers = this.getHammers()
+    const newHammers = currentHammers + count
+    this.setHammers(newHammers)
+    return newHammers
+  }
+
+  /**
+   * Use a hammer (returns false if none available)
+   */
+  static useHammer(): boolean {
+    const currentHammers = this.getHammers()
+    if (currentHammers > 0) {
+      this.setHammers(currentHammers - 1)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Reset hammers to 0
+   */
+  static resetHammers(): void {
+    this.setHammers(0)
+  }
+
+  /**
+   * Buy a hammer with coins (20 coins each)
+   * Returns false if insufficient coins
+   */
+  static buyHammer(): boolean {
+    if (this.spendCoins(20)) {
+      this.addHammers(1)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Buy 3 hammers with coins (50 coins - discounted)
+   * Returns false if insufficient coins
+   */
+  static buyHammerPack(): boolean {
+    if (this.spendCoins(50)) {
+      this.addHammers(3)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Calculate stars earned based on score and difficulty
+   * 1 star: Challenge complete (always awarded on level complete)
+   * 2 stars: Score >= 50% of target score for difficulty
+   * 3 stars: Score >= 80% of target score for difficulty
+   */
+  static calculateStars(score: number, difficulty: Difficulty): number {
+    const targetScore = this.TARGET_SCORES[difficulty]
+    const scorePercentage = score / targetScore
+
+    if (scorePercentage >= this.STAR_THRESHOLDS.threeStar) {
+      return 3
+    } else if (scorePercentage >= this.STAR_THRESHOLDS.twoStar) {
+      return 2
+    } else {
+      return 1  // Always get at least 1 star for completing the level
+    }
+  }
+
+  /**
+   * Get all best scores as a map of level -> score
+   */
+  static getBestScores(): Record<number, number> {
+    const stored = localStorage.getItem(this.BEST_SCORES_KEY)
+    return stored ? JSON.parse(stored) : {}
+  }
+
+  /**
+   * Get best score for a specific level
+   */
+  static getBestScoreForLevel(level: number): number {
+    const bestScores = this.getBestScores()
+    return bestScores[level] || 0
+  }
+
+  /**
+   * Update best score for a level if the new score is higher
+   * Returns true if this is a new best score
+   */
+  static updateBestScore(level: number, score: number): boolean {
+    const bestScores = this.getBestScores()
+    const previousBest = bestScores[level] || 0
+
+    if (score > previousBest) {
+      bestScores[level] = score
+      localStorage.setItem(this.BEST_SCORES_KEY, JSON.stringify(bestScores))
+      return true
+    }
+
+    return false
+  }
+
+  /**
+   * Calculate complete level result including stars and coin rewards
+   * This should be called when the player completes a level
+   */
+  static calculateLevelResult(level: number, score: number, difficulty: Difficulty): LevelResult {
+    const stars = this.calculateStars(score, difficulty)
+    const coinsEarned = this.COIN_REWARDS[stars as keyof typeof this.COIN_REWARDS]
+    const previousBestScore = this.getBestScoreForLevel(level)
+    const isNewBest = this.updateBestScore(level, score)
+
+    // Award the coins
+    this.addCoins(coinsEarned)
+
+    return {
+      level,
+      score,
+      stars,
+      coinsEarned,
+      isNewBest,
+      previousBestScore
+    }
+  }
+
+  /**
+   * Get target score for a difficulty level (used for star calculation)
+   */
+  static getTargetScore(difficulty: Difficulty): number {
+    return this.TARGET_SCORES[difficulty]
   }
 }

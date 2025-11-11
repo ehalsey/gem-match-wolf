@@ -5,3 +5,11 @@ nul
 sourcegem-match-wolf-clone/
 *.azurite/
 bejeweled/srcindex.ts
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+test-output.log
+
+# Test screenshots
+tests/screenshots/*.png

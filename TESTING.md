@@ -40,13 +40,15 @@ http://localhost:8000/?board=match5
 ```
 Available test boards:
 - `match5` - 5 blue gems in a row (creates Light Ball)
-- `match4h` - 4 blue gems horizontally (creates Horizontal Rocket)
-- `match4v` - 4 red gems vertically (creates Vertical Rocket)
+- `match4h` - Horizontal 4-match setup (swap red [0,3] with blue [0,4] → creates Horizontal Rocket)
+- `match4v` - Vertical 4-match setup (swap green [3,0] with red [4,0] → creates Vertical Rocket)
 - `lshape` - Red L-shape pattern (creates TNT)
 - `rect3x2` - Blue 3x2 rectangle pattern (creates TNT)
 - `rect2x3` - Blue 2x3 rectangle pattern (creates TNT)
 - `square` - 2x2 red square (creates Fly-Away)
 - `tnt-test` or `bomb-test` - TNT already spawned in center (test blast radius)
+- `hammer-test` - Board with no easy matches + 3 hammers (test hammer power-up)
+- `level5-snapshot` - Level 5 snapshot with vertical rocket and color bomb
 
 ### Combine Parameters
 ```
@@ -117,6 +119,18 @@ gameDebug.captureMove(0, 0, 0, 1, "Should create horizontal rocket when 4 blues 
 The console will output a complete bug report template with before/after states that you can copy and share.
 
 ## Testing Workflow Examples
+
+### Test Horizontal Rocket (4-Match Horizontal)
+1. Visit: `http://localhost:8000/?board=match4h`
+2. Swap red at [0,3] with blue at [0,4]
+3. Observe: 4 blues in a row → creates Horizontal Rocket at swap position
+4. Swap the rocket to activate and see horizontal line clear with wave effect (destroys outward from center)
+
+### Test Vertical Rocket (4-Match Vertical)
+1. Visit: `http://localhost:8000/?board=match4v`
+2. Swap green at [3,0] with red at [4,0]
+3. Observe: 4 reds in a column → creates Vertical Rocket at swap position
+4. Swap the rocket to activate and see vertical column clear with wave effect (destroys outward from center)
 
 ### Test Light Ball (5-Match)
 1. Visit: `http://localhost:8000/?board=match5`
@@ -225,6 +239,8 @@ If you prefer to capture state manually:
 - **Infinite Testing**: Debug mode disables "no more moves" game over, so you can keep testing even without valid moves
 - **Bug Reporting**: Use `gameDebug.captureMove()` for instant bug reports with before/after state
 - **Production Safety**: Debug features only work in development, won't affect deployed game
+- **Visual Effects**: Scores fly to the scoreboard, and rocket blasts animate outward in waves from the source
+- **Slow Motion**: Use `?speed=0.5` to slow down all animations for easier observation
 
 ## Common Test Cases
 

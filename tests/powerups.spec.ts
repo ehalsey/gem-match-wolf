@@ -1,10 +1,17 @@
 import { test, expect } from '@playwright/test'
 
 test('horizontal rocket clears its row when triggered', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('http://localhost:8000/', { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
 
   // wait for Phaser and the GameScene to be available
-  await page.waitForFunction(() => Boolean((window as any).game && (window as any).game.scene && (window as any).game.scene.keys['GameScene']))
+  await page.waitForFunction(() => Boolean((window as any).game && (window as any).game.scene && (window as any).game.scene.keys['GameScene']), { timeout: 5000 })
+
+  // Wait for board to be initialized
+  await page.waitForFunction(() => {
+    const scene = (window as any).game?.scene?.keys['GameScene']
+    return scene?.board && scene.board.length > 0
+  }, { timeout: 5000 })
 
   // run everything inside the page to access the scene and board objects directly
   const result = await page.evaluate(async () => {
@@ -42,11 +49,66 @@ test('horizontal rocket clears its row when triggered', async ({ page }) => {
   expect(result.every(Boolean)).toBeTruthy()
 })
 
-test('vertical rocket + vertical rocket combo clears column and row', async ({ page }) => {
-  await page.goto('/')
+test('vertical rocket clears its column when triggered', async ({ page }) => {
+  await page.goto('http://localhost:8000/', { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
 
   // wait for Phaser and the GameScene to be available
-  await page.waitForFunction(() => Boolean((window as any).game && (window as any).game.scene && (window as any).game.scene.keys['GameScene']))
+  await page.waitForFunction(() => Boolean((window as any).game && (window as any).game.scene && (window as any).game.scene.keys['GameScene']), { timeout: 5000 })
+
+  // Wait for board to be initialized
+  await page.waitForFunction(() => {
+    const scene = (window as any).game?.scene?.keys['GameScene']
+    return scene?.board && scene.board.length > 0
+  }, { timeout: 5000 })
+
+  // run everything inside the page to access the scene and board objects directly
+  const result = await page.evaluate(async () => {
+    // grab the scene
+    const scene = (window as any).game.scene.keys['GameScene'] as any
+
+    // load a deterministic test board
+    if (typeof scene.loadTestBoard === 'function') {
+      scene.loadTestBoard('tnt-test')
+    }
+
+    // spawn a vertical rocket at row 4 col 4 (center)
+    if (typeof scene.spawnPowerup === 'function') {
+      scene.spawnPowerup('vertical-rocket', 4, 4)
+    } else {
+      // fallback: directly set powerup on the cell
+      const cell = scene.board[4][4]
+      cell.powerup = 'vertical-rocket'
+    }
+
+    // trigger the power-up by calling the scene method
+    const targetCell = scene.board[4][4]
+    const maybePromise = scene.triggerPowerUp(targetCell)
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      await maybePromise
+    }
+
+    // collect which cells in column 4 are empty
+    const columnEmpty = scene.board.map((row: any) => !!row[4].empty)
+    return columnEmpty
+  })
+
+  // expect the entire column to be empty (rocket destroys whole column)
+  expect(result.every(Boolean)).toBeTruthy()
+})
+
+test('vertical rocket + vertical rocket combo clears column and row', async ({ page }) => {
+  await page.goto('http://localhost:8000/', { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
+
+  // wait for Phaser and the GameScene to be available
+  await page.waitForFunction(() => Boolean((window as any).game && (window as any).game.scene && (window as any).game.scene.keys['GameScene']), { timeout: 5000 })
+
+  // Wait for board to be initialized
+  await page.waitForFunction(() => {
+    const scene = (window as any).game?.scene?.keys['GameScene']
+    return scene?.board && scene.board.length > 0
+  }, { timeout: 5000 })
 
   // run everything inside the page to access the scene and board objects directly
   const result = await page.evaluate(async () => {
@@ -99,10 +161,11 @@ test('vertical rocket + vertical rocket combo clears column and row', async ({ p
 })
 
 test('horizontal rocket + horizontal rocket combo clears row and column', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('http://localhost:8000/', { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
 
   // wait for Phaser and the GameScene to be available
-  await page.waitForFunction(() => Boolean((window as any).game && (window as any).game.scene && (window as any).game.scene.keys['GameScene']))
+  await page.waitForFunction(() => Boolean((window as any).game && (window as any).game.scene && (window as any).game.scene.keys['GameScene']), { timeout: 5000 })
 
   // run everything inside the page to access the scene and board objects directly
   const result = await page.evaluate(async () => {

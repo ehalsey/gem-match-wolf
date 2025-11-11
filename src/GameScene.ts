@@ -12,14 +12,9 @@ import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
 import { MatchDetector } from './game/MatchDetector'
 import { PowerUpSystem } from './game/PowerUpSystem'
 import { type Cell, type PowerUpType, type Position } from './types'
+import { GEM_DEFINITIONS, getGemSprite, getAllGemIds } from './GemConfig'
 
-const gems = [
-  'blue',
-  'green',
-  'red',
-  'pink',
-  'yellow'
-]
+const gems = getAllGemIds()
 
 /**
  * Number of cells required to trigger an explosion
@@ -57,6 +52,9 @@ export default class GameScene extends Phaser.Scene {
   comboText: Phaser.GameObjects.Text | null
   comboContainer: Phaser.GameObjects.Container | null
   winningMovesCache: { hash: string, moves: { cell1: Cell, cell2: Cell }[] } | null
+  hammerModeActive: boolean
+  bugReportFirstCell: Cell | null
+  gameSpeed: number
 
   constructor () {
     super({
@@ -68,15 +66,21 @@ export default class GameScene extends Phaser.Scene {
   // Parse URL parameters for testing
   getUrlParams () {
     const params = new URLSearchParams(window.location.search)
+    const speedParam = params.get('speed')
     return {
       seed: params.get('seed'),
       debug: params.get('debug') === 'true',
-      board: params.get('board')
+      board: params.get('board'),
+      speed: speedParam ? parseFloat(speedParam) : 1.0
     }
   }
 
   preload () {
-    gems.forEach(gem => this.load.image(gem, `assets/${gem}.png`))
+    // Load gem sprites (load unique sprites only, not duplicates)
+    const uniqueSprites = new Set(GEM_DEFINITIONS.map(gem => gem.sprite))
+    uniqueSprites.forEach(sprite => {
+      this.load.image(sprite, `assets/${sprite}.png`)
+    })
 
     // Load power-up sprites
     this.load.image('horizontal-rocket', 'assets/horizontal-rocket.png')
@@ -103,12 +107,25 @@ export default class GameScene extends Phaser.Scene {
     const params = this.getUrlParams()
     this.debugMode = params.debug
     this.testBoard = params.board
+    this.gameSpeed = params.speed
 
-    // Set seed if provided
+    // Set seed - either from URL or generate random one
+    let seedValue: string
     if (params.seed) {
-      const seedValue = params.seed
-      Phaser.Math.RND.sow([seedValue])
-      console.log(`[DEBUG] Seed set to: ${seedValue}`)
+      seedValue = params.seed
+    } else {
+      // Generate random seed for reproducibility
+      seedValue = Math.floor(Math.random() * 1000000).toString()
+    }
+    Phaser.Math.RND.sow([seedValue])
+
+    // Always log the seed so users can reproduce board states
+    console.log(`%c🎲 SEED: ${seedValue}`, 'font-weight: bold; font-size: 14px; color: #FFD700; background: #1a1a2e; padding: 4px 8px; border-radius: 4px;')
+    console.log(`   Reproduce this board: ?seed=${seedValue}`)
+
+    // Log speed setting
+    if (this.gameSpeed !== 1.0) {
+      console.log(`[DEBUG] Game speed: ${this.gameSpeed}x (animations ${(1 / this.gameSpeed).toFixed(2)}x ${this.gameSpeed < 1 ? 'slower' : 'faster'})`)
     }
 
     // Log debug mode status
@@ -124,7 +141,14 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.captureMove(fromRow, fromCol, toRow, toCol, expectedBehavior) - Bug reporting tool')
       console.log('[DEBUG] Keyboard shortcuts:')
       console.log('  - U or Z: Undo last move')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo')
+      console.log('[DEBUG] Bug Reporting:')
+      console.log('  - Shift+Click first gem → Shift+Click second gem → Enter description')
+      console.log('[DEBUG] URL Parameters:')
+      console.log('  - ?speed=0.5 - Slow down animations (0.5 = half speed, 2.0 = double speed)')
+      console.log('  - ?debug=true - Enable debug mode')
+      console.log('  - ?board=match4h - Load test board')
+      console.log('  - ?seed=12345 - Set random seed')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, rocket-match-order, light-ball-combo, hammer-test, level5-snapshot')
     }
 
     this.createBackground()
@@ -151,8 +175,8 @@ export default class GameScene extends Phaser.Scene {
     this.levelConfig = LevelSystem.getCurrentLevelConfig()
     this.currentChallenge = { ...this.levelConfig.challenge }  // Clone the challenge
 
-    // Load cumulative score from storage (score persists across levels)
-    this.setScore(LevelSystem.getScore())
+    // Load level score (resets each level)
+    this.setScore(LevelSystem.getLevelScore())
     this.setMoves(this.levelConfig.moves)
 
     // Notify MenuScene of initial challenge state
@@ -167,6 +191,12 @@ export default class GameScene extends Phaser.Scene {
 
     // Initialize winning moves cache
     this.winningMovesCache = null
+
+    // Initialize hammer mode
+    this.hammerModeActive = false
+
+    // Initialize bug report tracking
+    this.bugReportFirstCell = null
 
     // Expose debug commands to console (always available)
     this.exposeDebugCommands()
@@ -185,6 +215,14 @@ export default class GameScene extends Phaser.Scene {
 
     this.registry.events.on('NEW_GAME', () => {
       this.handleStartNewGame()
+    })
+
+    this.registry.events.on('HAMMER_ACTIVATED', () => {
+      this.activateHammerMode()
+    })
+
+    this.registry.events.on('LOAD_NEXT_LEVEL', () => {
+      this.loadNextLevel()
     })
   }
 
@@ -216,7 +254,7 @@ export default class GameScene extends Phaser.Scene {
     this.currentChallenge = { ...this.levelConfig.challenge }
 
     // Score already reset to 0 by LevelSystem.reset()
-    this.setScore(LevelSystem.getScore())
+    this.setScore(LevelSystem.getLevelScore())
     this.setMoves(this.levelConfig.moves)
 
     // Notify MenuScene of challenge reset and lives update
@@ -242,8 +280,8 @@ export default class GameScene extends Phaser.Scene {
     this.levelConfig = LevelSystem.getCurrentLevelConfig()
     this.currentChallenge = { ...this.levelConfig.challenge }
 
-    // Keep cumulative score
-    this.setScore(LevelSystem.getScore())
+    // Load level score (already reset to 0 in gameOver)
+    this.setScore(LevelSystem.getLevelScore())
     this.setMoves(this.levelConfig.moves)
 
     // Notify MenuScene of new challenge and level
@@ -292,6 +330,33 @@ export default class GameScene extends Phaser.Scene {
     graphics.destroy()
   }
 
+  /**
+   * Get the sprite texture name for a cell
+   * This allows gem IDs to be mapped to different sprite assets
+   */
+  getCellTexture (cell: Cell): string {
+    if (cell.powerup) {
+      return cell.powerup
+    }
+    return getGemSprite(cell.color)
+  }
+
+  /**
+   * Calculate animation duration adjusted for game speed
+   */
+  duration (baseDuration: number): number {
+    return baseDuration / this.gameSpeed
+  }
+
+  /**
+   * Debug log helper - only logs in debug mode
+   */
+  debugLog (message: string, ...args: any[]) {
+    if (this.debugMode) {
+      console.log(`[DEBUG] ${message}`, ...args)
+    }
+  }
+
   initBoard () {
     // Create empty board
     this.board = createEmptyBoard(size)
@@ -321,7 +386,7 @@ export default class GameScene extends Phaser.Scene {
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = row * CELL_SIZE + CELL_SIZE / 2
-        cell.sprite = this.add.sprite(x, y, cell.color)
+        cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
           .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
           .setInteractive({ draggable: true })
       }
@@ -332,15 +397,17 @@ export default class GameScene extends Phaser.Scene {
     this.score = score
     this.registry.set('score', score)
     // Score is tracked for leaderboards but is NOT a challenge win condition
-    // Also persist to storage for cumulative scoring
-    LevelSystem.setScore(score)
+    // This now tracks level score (resets each level)
+    LevelSystem.setLevelScore(score)
   }
 
   addScore (points: number) {
-    // Add points to cumulative score and update local variable
-    const newScore = LevelSystem.addScore(points)
-    this.score = newScore
-    this.registry.set('score', newScore)
+    // Add points to both level score and cumulative score
+    const newLevelScore = LevelSystem.addLevelScore(points)
+    LevelSystem.addScore(points)  // Also update cumulative all-time score
+
+    this.score = newLevelScore
+    this.registry.set('score', newLevelScore)
   }
 
   setMoves (moves: number) {
@@ -381,6 +448,9 @@ export default class GameScene extends Phaser.Scene {
 
     this.currentCombo = combo
 
+    // Stop any existing tweens on the combo container to prevent conflicts
+    this.tweens.killTweensOf(this.comboContainer)
+
     if (combo <= 1) {
       // Hide combo display for no combo or first cascade
       this.tweens.add({
@@ -419,14 +489,27 @@ export default class GameScene extends Phaser.Scene {
     const background = this.comboContainer.getAt(0) as Phaser.GameObjects.Arc
     background.setFillStyle(backgroundColor, 0.8)
 
-    // Show and pulse animation
+    // Show and pulse animation - then fade out
     this.tweens.add({
       targets: this.comboContainer,
       alpha: 1,
       scale: 1.2,
-      duration: 200,
+      duration: this.duration(300),
       yoyo: true,
-      ease: 'Back.easeOut'
+      ease: 'Back.easeOut',
+      hold: this.duration(800), // Hold at peak scale for better visibility
+      repeat: 0,
+      onComplete: () => {
+        // Fade out after the pulse animation completes
+        this.tweens.add({
+          targets: this.comboContainer,
+          alpha: 0,
+          scale: 1,
+          duration: this.duration(400),
+          delay: this.duration(200), // Small delay before fade out
+          ease: 'Power2'
+        })
+      }
     })
 
     // Create particle burst effect
@@ -437,8 +520,8 @@ export default class GameScene extends Phaser.Scene {
     const x = BOARD_SIZE / 2
     const y = 80
 
-    // Particle count and color based on combo level
-    let particleCount = Math.min(combo * 5, 30)
+    // Reduced particle count for less visual clutter
+    let particleCount = Math.min(combo * 3, 15)
     let tintColor = 0x00ff00 // Green
 
     if (combo >= 5) {
@@ -450,10 +533,10 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const particles = this.add.particles(x, y, 'particle', {
-      speed: { min: 100, max: 200 },
-      scale: { start: 0.6, end: 0 },
-      alpha: { start: 1, end: 0 },
-      lifespan: 600,
+      speed: { min: 150, max: 250 }, // Faster so they move away from combo text quickly
+      scale: { start: 0.4, end: 0 }, // Smaller particles
+      alpha: { start: 0.8, end: 0 }, // Start slightly transparent
+      lifespan: 400, // Shorter lifespan
       quantity: particleCount,
       tint: tintColor,
       blendMode: 'ADD',
@@ -461,7 +544,7 @@ export default class GameScene extends Phaser.Scene {
     })
 
     // Auto-destroy particles after they're done
-    this.time.delayedCall(700, () => particles.destroy())
+    this.time.delayedCall(500, () => particles.destroy())
   }
 
   resetCombo () {
@@ -571,7 +654,7 @@ export default class GameScene extends Phaser.Scene {
 
       const x = cellData.column * CELL_SIZE + CELL_SIZE / 2
       const y = cellData.row * CELL_SIZE + CELL_SIZE / 2
-      cell.sprite = this.add.sprite(x, y, cell.color)
+      cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
         .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
         .setInteractive({ draggable: true })
     }
@@ -669,6 +752,38 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Activate hammer mode - allows player to click any gem to destroy it
+   */
+  activateHammerMode () {
+    if (LevelSystem.getHammers() <= 0) {
+      console.log('[HAMMER] No hammers available')
+      return
+    }
+
+    if (this.isGameOver) {
+      console.log('[HAMMER] Cannot use hammer when game is over')
+      return
+    }
+
+    console.log('[HAMMER] Hammer mode activated - click a gem to destroy it')
+    this.hammerModeActive = true
+
+    // Change cursor to crosshair to indicate hammer mode
+    this.input.setDefaultCursor('crosshair')
+  }
+
+  /**
+   * Deactivate hammer mode
+   */
+  deactivateHammerMode () {
+    console.log('[HAMMER] Hammer mode deactivated')
+    this.hammerModeActive = false
+
+    // Reset cursor to default
+    this.input.setDefaultCursor('default')
+  }
+
+  /**
    * Retry current level with a life
    */
   retryLevel () {
@@ -713,6 +828,126 @@ export default class GameScene extends Phaser.Scene {
 
     const pointedCell = this.getCellAt(pointer)
 
+    // Handle shift+click for bug reporting (capture move)
+    if (pointer.event.shiftKey && pointedCell && !pointedCell.empty) {
+      if (!this.bugReportFirstCell) {
+        // First shift+click - select this cell
+        this.bugReportFirstCell = pointedCell
+        console.log(`[BUG REPORT] First cell selected: [${pointedCell.row}, ${pointedCell.column}]`)
+        console.log('[BUG REPORT] Shift+click on second cell to capture move')
+
+        // Add visual feedback
+        pointedCell.sprite.setTint(0xffff00) // Yellow tint
+        pointedCell.sprite.setScale(1.1)
+      } else {
+        // Second shift+click - capture the move
+        const firstCell = this.bugReportFirstCell
+        const secondCell = pointedCell
+
+        // Clear visual feedback
+        firstCell.sprite.clearTint()
+        firstCell.sprite.setScale(1)
+
+        // Reset tracking
+        this.bugReportFirstCell = null
+
+        // Prompt for expected behavior
+        const description = window.prompt('Describe the expected behavior:')
+
+        if (description) {
+          console.log(`[BUG REPORT] Capturing move from [${firstCell.row}, ${firstCell.column}] to [${secondCell.row}, ${secondCell.column}]`)
+          this.captureMove(firstCell.row, firstCell.column, secondCell.row, secondCell.column, description)
+        } else {
+          console.log('[BUG REPORT] Cancelled - no description provided')
+        }
+      }
+      return
+    }
+
+    // If clicking normally but had a bug report cell selected, clear it
+    if (this.bugReportFirstCell && !pointer.event.shiftKey) {
+      this.bugReportFirstCell.sprite.clearTint()
+      this.bugReportFirstCell.sprite.setScale(1)
+      this.bugReportFirstCell = null
+      console.log('[BUG REPORT] Selection cleared')
+    }
+
+    // Handle hammer mode - click to destroy a gem
+    if (this.hammerModeActive) {
+      if (!pointedCell || pointedCell.empty) {
+        console.log('[HAMMER] Invalid cell - click a gem to destroy it')
+        return
+      }
+
+      console.log(`[HAMMER] Destroying cell at (${pointedCell.row}, ${pointedCell.column})`)
+
+      // Use a hammer from inventory
+      if (!LevelSystem.useHammer()) {
+        console.log('[HAMMER] Failed to use hammer - none available')
+        this.deactivateHammerMode()
+        return
+      }
+
+      // Update hammer counter in MenuScene
+      this.registry.events.emit('HAMMERS_UPDATED')
+
+      // Deactivate hammer mode
+      this.deactivateHammerMode()
+
+      // Mark cell for destruction
+      this.markCellForDestructionImmediate(pointedCell)
+
+      // Play destruction sound
+      this.sound.play('explode', { volume: 0.5 })
+
+      // Set move in progress to prevent other actions
+      this.moveInProgress = true
+
+      // Execute destruction and cascade
+      await this.destroyCells()
+      await this.makeCellsFall()
+      await this.refillBoard()
+
+      // Handle cascades if there are matches
+      let cascades = 0
+      while (MatchDetector.boardShouldExplode(this.board) || this.powerUpSystem.hasSpecialPatterns(this.board)) {
+        const chains = MatchDetector.getExplodingChains(this.board)
+
+        // Track challenge progress for matched gems
+        this.updateChallengeForMatches(chains)
+
+        // Create power-ups from chains
+        this.powerUpSystem.createPowerUpsFromChains(
+          this.board,
+          chains,
+          (type) => this.updateChallengeForPowerUp(type),
+          null
+        )
+
+        // Show floating score text
+        this.showFloatingScores(chains, cascades)
+
+        await this.destroyCells()
+        this.addScore(this.computeScore(chains, cascades))
+        await this.makeCellsFall()
+        await this.refillBoard()
+
+        cascades++
+        this.updateComboDisplay(cascades)
+      }
+
+      // Reset combo after cascades finish
+      this.resetCombo()
+
+      // Check level completion
+      this.checkLevelCompletion()
+
+      // Move complete
+      this.moveInProgress = false
+
+      return
+    }
+
     // Note: Power-ups can no longer be activated by direct click
     // They MUST be swapped/dragged to activate, giving players strategic control
     // to position rockets or choose Light Ball target colors
@@ -737,6 +972,11 @@ export default class GameScene extends Phaser.Scene {
 
     this.moveInProgress = true
 
+    this.debugLog('╔════════════════════════════════════════════════════════════╗')
+    this.debugLog('║                    SWAP STARTED                            ║')
+    this.debugLog('╚════════════════════════════════════════════════════════════╝')
+    this.debugLog(`Swapping [${firstCell.row},${firstCell.column}] (${firstCell.color}${firstCell.powerup ? `, ${firstCell.powerup}` : ''}) ↔ [${secondCell.row},${secondCell.column}] (${secondCell.color}${secondCell.powerup ? `, ${secondCell.powerup}` : ''})`)
+
     // Track the swap for smart power-up positioning (capture positions before swap)
     this.lastSwap = this.captureSwapContext(firstCell, secondCell)
 
@@ -745,21 +985,87 @@ export default class GameScene extends Phaser.Scene {
 
     await this.moveSpritesWhereTheyBelong()
 
-    // Check if either swapped cell is a power-up and activate it
+    // STEP 1: Check if swap creates a match (which should create a power-up FIRST)
+    const hasMatch = MatchDetector.boardShouldExplode(this.board)
+    const hasSpecialPattern = this.powerUpSystem.hasSpecialPatterns(this.board, this.lastSwap)
     const hasPowerUp = firstCell.powerup || secondCell.powerup
+
+    this.debugLog('After swap:', { hasMatch, hasSpecialPattern, hasPowerUp })
+
+    // STEP 2: If there's a match, create power-ups BEFORE triggering swapped power-ups
+    if (hasMatch || hasSpecialPattern) {
+      this.debugLog('→ Match detected! Creating power-ups BEFORE triggering swapped power-up...')
+
+      const chains = MatchDetector.getExplodingChains(this.board)
+      this.debugLog(`  Found ${chains.length} chains to match`)
+
+      // Create power-ups from the match
+      this.powerUpSystem.createPowerUpsFromChains(
+        this.board,
+        chains,
+        (type) => this.updateChallengeForPowerUp(type),
+        this.lastSwap
+      )
+      this.debugLog('  Power-ups created from match ✓')
+    }
+
+    // STEP 3: Now trigger the swapped power-up (if any)
     if (hasPowerUp) {
-      console.log('=== POWER-UP SWAPPED! ===')
-      if (firstCell.powerup) {
-        console.log(`Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
-        this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
+      this.debugLog('→ Triggering swapped power-up...')
+
+      // Check for power-up combos first
+      const p1 = firstCell.powerup
+      const p2 = secondCell.powerup
+
+      // Light Ball + Light Ball = Board clear
+      if (p1 === 'light-ball' && p2 === 'light-ball') {
+        await this.triggerLightBallLightBallCombo(firstCell, secondCell)
       }
-      if (secondCell.powerup) {
-        console.log(`Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
-        this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
+      // Light Ball + TNT = Mega explosion
+      else if ((p1 === 'light-ball' && p2 === 'tnt') || (p1 === 'tnt' && p2 === 'light-ball')) {
+        await this.triggerLightBallTNTCombo(firstCell, secondCell)
       }
+      // Light Ball + Rocket = Color clear + line clear
+      else if ((p1 === 'light-ball' && (p2 === 'horizontal-rocket' || p2 === 'vertical-rocket')) ||
+               ((p1 === 'horizontal-rocket' || p1 === 'vertical-rocket') && p2 === 'light-ball')) {
+        const lightBall = p1 === 'light-ball' ? firstCell : secondCell
+        const rocket = p1 === 'light-ball' ? secondCell : firstCell
+        await this.triggerLightBallRocketCombo(lightBall, rocket)
+      }
+      // Fly-Away + Light Ball = Multi-target strike
+      else if ((p1 === 'fly-away' && p2 === 'light-ball') || (p1 === 'light-ball' && p2 === 'fly-away')) {
+        const flyAway = p1 === 'fly-away' ? firstCell : secondCell
+        const lightBall = p1 === 'fly-away' ? secondCell : firstCell
+        await this.triggerFlyAwayLightBallCombo(flyAway, lightBall)
+      }
+      // Two Fly-Aways = Create 3 Fly-Aways
+      else if (p1 === 'fly-away' && p2 === 'fly-away') {
+        await this.triggerFlyAwayFlyAwayCombo(firstCell, secondCell)
+      }
+      // Two vertical rockets
+      else if (p1 === 'vertical-rocket' && p2 === 'vertical-rocket') {
+        await this.triggerVerticalRocketCombo(firstCell, secondCell)
+      }
+      // Two horizontal rockets
+      else if (p1 === 'horizontal-rocket' && p2 === 'horizontal-rocket') {
+        await this.triggerHorizontalRocketCombo(firstCell, secondCell)
+      }
+      else {
+        // No combo - trigger power-ups individually
+        if (firstCell.powerup) {
+          this.debugLog(`  Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
+          this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
+        }
+        if (secondCell.powerup) {
+          this.debugLog(`  Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
+          this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
+        }
+      }
+
       await this.destroyCells()
       await this.makeCellsFall()
       await this.refillBoard()
+      this.debugLog('  Swapped power-up completed ✓')
     }
 
     const hasSpecialPatterns = this.powerUpSystem.hasSpecialPatterns(this.board, this.lastSwap)
@@ -814,7 +1120,7 @@ export default class GameScene extends Phaser.Scene {
         cascades++
 
         // Update combo display
-        this.updateComboDisplay(cascades + 1)
+        this.updateComboDisplay(cascades)
       }
 
       // Reset combo after cascades finish
@@ -911,10 +1217,30 @@ export default class GameScene extends Phaser.Scene {
   gameOver (message: string = 'Game Over', isLevelComplete: boolean = false, canRetry: boolean = false) {
     this.isGameOver = true
 
-    // If level complete, advance to next level
+    // If level complete, show new level complete screen with stars
     if (isLevelComplete) {
-      const nextLevel = LevelSystem.advanceLevel()
-      console.log(`Level complete! Advanced to level ${nextLevel}`)
+      const currentLevel = LevelSystem.getCurrentLevel()
+      const difficulty = this.levelConfig.difficulty
+
+      // Calculate level result (stars, coins, etc.)
+      const result = LevelSystem.calculateLevelResult(currentLevel, this.score, difficulty)
+
+      console.log(`Level ${currentLevel} complete!`, result)
+
+      // Award 1 hammer for completing the level
+      const hammers = LevelSystem.addHammers(1)
+      console.log(`[HAMMER] Earned 1 hammer! Total: ${hammers}`)
+      this.registry.events.emit('HAMMERS_UPDATED')
+
+      // Advance to next level
+      LevelSystem.advanceLevel()
+
+      // Reset level score for the new level
+      LevelSystem.resetLevelScore()
+
+      // Launch level complete scene
+      this.scene.launch('LevelCompleteScene', { result })
+      return
     }
 
     // Only update personal best on game over (not level complete)
@@ -1094,7 +1420,7 @@ export default class GameScene extends Phaser.Scene {
         strokeColor = '#006600'
       }
 
-      // Create floating score text
+      // Create floating score text (high depth so it floats over everything including the menu)
       const scoreText = this.add.text(x, y, `+${chainScore}`, {
         fontSize: '32px',
         fontFamily: 'Arial',
@@ -1104,7 +1430,7 @@ export default class GameScene extends Phaser.Scene {
         strokeThickness: 4
       })
         .setOrigin(0.5)
-        .setDepth(100)
+        .setDepth(10000)
 
       // Show multiplier if > 1x
       if (multiplier > 1) {
@@ -1117,7 +1443,7 @@ export default class GameScene extends Phaser.Scene {
           strokeThickness: 3
         })
           .setOrigin(0.5)
-          .setDepth(100)
+          .setDepth(10000)
 
         // Animate multiplier text with score
         this.tweens.add({
@@ -1144,14 +1470,26 @@ export default class GameScene extends Phaser.Scene {
         this.time.delayedCall(600, () => particles.destroy())
       }
 
-      // Animate: float up and fade out with scale
+      // Emit event to MenuScene to create flying score (so it renders over the menu)
+      const gameSceneX = x + MENU_WIDTH  // Convert to screen space (GameScene camera is offset by MENU_WIDTH)
+      this.registry.events.emit('SCORE_FLYOUT', {
+        startX: gameSceneX,
+        startY: y,
+        score: chainScore,
+        color: scoreColor,
+        strokeColor: strokeColor,
+        multiplier: multiplier,
+        gameSpeed: this.gameSpeed
+      })
+
+      // Animate: pop up and fade (stays in game area briefly before MenuScene takes over)
       this.tweens.add({
         targets: scoreText,
-        y: y - 80,
+        y: y - 30,
+        scale: multiplier > 1 ? 1.3 : 1.2,
         alpha: 0,
-        scale: multiplier > 1 ? 1.3 : 1,
-        duration: 1500,
-        ease: 'Cubic.easeOut',
+        duration: this.duration(400),
+        ease: 'Back.easeOut',
         onComplete: () => scoreText.destroy()
       })
     }
@@ -1230,22 +1568,68 @@ export default class GameScene extends Phaser.Scene {
     // Also chain-activate any power-ups we hit
     switch (powerUpType) {
       case 'horizontal-rocket':
-        // Destroy entire row
+        // Destroy row in waves radiating outward from source
         let horizontalChallengeCount = 0
-        for (let col = 0; col < size; col++) {
-          const targetCell = this.board[cell.row][col]
-          // Chain-activate any power-ups in the row
-          if (targetCell.powerup && targetCell !== cell) {
-            console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-            await this.triggerPowerUp(targetCell, undefined, targetedCells)
+        const maxDistanceLeft = cell.column
+        const maxDistanceRight = size - 1 - cell.column
+        const maxHorizontalDistance = Math.max(maxDistanceLeft, maxDistanceRight)
+
+        // Process each distance level sequentially
+        for (let distance = 0; distance <= maxHorizontalDistance; distance++) {
+          const cellsAtDistance: Cell[] = []
+
+          // Add cells at this distance (left and/or right)
+          if (distance === 0) {
+            // Center cell (the rocket itself)
+            cellsAtDistance.push(cell)
           } else {
-            // Count toward challenge if this is the challenge color
-            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
-              horizontalChallengeCount++
+            // Left cell
+            const leftCol = cell.column - distance
+            if (leftCol >= 0) {
+              cellsAtDistance.push(this.board[cell.row][leftCol])
             }
-            this.markCellForDestructionImmediate(targetCell)
+            // Right cell
+            const rightCol = cell.column + distance
+            if (rightCol < size) {
+              cellsAtDistance.push(this.board[cell.row][rightCol])
+            }
+          }
+
+          // Process all cells at this distance
+          for (const targetCell of cellsAtDistance) {
+            if (targetCell.powerup && targetCell !== cell) {
+              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+              await this.triggerPowerUp(targetCell, undefined, targetedCells)
+            } else {
+              if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                horizontalChallengeCount++
+              }
+              this.markCellForDestructionImmediate(targetCell)
+
+              // Create particle effect for this cell
+              const particleX = targetCell.column * CELL_SIZE + CELL_SIZE / 2
+              const particleY = targetCell.row * CELL_SIZE + CELL_SIZE / 2
+              const particles = this.add.particles(particleX, particleY, 'particle', {
+                speed: { min: 50, max: 100 },
+                scale: { start: 0.4, end: 0 },
+                alpha: { start: 1, end: 0 },
+                lifespan: 300,
+                quantity: 5,
+                tint: 0xff6600,
+                blendMode: 'ADD'
+              })
+              this.time.delayedCall(400, () => particles.destroy())
+            }
+          }
+
+          // Add delay between distance levels (except after the last one)
+          if (distance < maxHorizontalDistance) {
+            await new Promise<void>(resolve => {
+              this.time.delayedCall(this.duration(80), () => resolve())
+            })
           }
         }
+
         // Update challenge progress
         if (horizontalChallengeCount > 0 && this.currentChallenge) {
           console.log(`[CHALLENGE] Horizontal rocket destroyed ${horizontalChallengeCount} ${this.currentChallenge.color} gems`)
@@ -1255,22 +1639,68 @@ export default class GameScene extends Phaser.Scene {
         break
 
       case 'vertical-rocket':
-        // Destroy entire column
+        // Destroy column in waves radiating outward from source
         let verticalChallengeCount = 0
-        for (let row = 0; row < size; row++) {
-          const targetCell = this.board[row][cell.column]
-          // Chain-activate any power-ups in the column
-          if (targetCell.powerup && targetCell !== cell) {
-            console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
-            await this.triggerPowerUp(targetCell, undefined, targetedCells)
+        const maxDistanceUp = cell.row
+        const maxDistanceDown = size - 1 - cell.row
+        const maxVerticalDistance = Math.max(maxDistanceUp, maxDistanceDown)
+
+        // Process each distance level sequentially
+        for (let distance = 0; distance <= maxVerticalDistance; distance++) {
+          const cellsAtDistance: Cell[] = []
+
+          // Add cells at this distance (up and/or down)
+          if (distance === 0) {
+            // Center cell (the rocket itself)
+            cellsAtDistance.push(cell)
           } else {
-            // Count toward challenge if this is the challenge color
-            if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
-              verticalChallengeCount++
+            // Up cell
+            const upRow = cell.row - distance
+            if (upRow >= 0) {
+              cellsAtDistance.push(this.board[upRow][cell.column])
             }
-            this.markCellForDestructionImmediate(targetCell)
+            // Down cell
+            const downRow = cell.row + distance
+            if (downRow < size) {
+              cellsAtDistance.push(this.board[downRow][cell.column])
+            }
+          }
+
+          // Process all cells at this distance
+          for (const targetCell of cellsAtDistance) {
+            if (targetCell.powerup && targetCell !== cell) {
+              console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+              await this.triggerPowerUp(targetCell, undefined, targetedCells)
+            } else {
+              if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+                verticalChallengeCount++
+              }
+              this.markCellForDestructionImmediate(targetCell)
+
+              // Create particle effect for this cell
+              const particleX = targetCell.column * CELL_SIZE + CELL_SIZE / 2
+              const particleY = targetCell.row * CELL_SIZE + CELL_SIZE / 2
+              const particles = this.add.particles(particleX, particleY, 'particle', {
+                speed: { min: 50, max: 100 },
+                scale: { start: 0.4, end: 0 },
+                alpha: { start: 1, end: 0 },
+                lifespan: 300,
+                quantity: 5,
+                tint: 0xff6600,
+                blendMode: 'ADD'
+              })
+              this.time.delayedCall(400, () => particles.destroy())
+            }
+          }
+
+          // Add delay between distance levels (except after the last one)
+          if (distance < maxVerticalDistance) {
+            await new Promise<void>(resolve => {
+              this.time.delayedCall(this.duration(80), () => resolve())
+            })
           }
         }
+
         // Update challenge progress
         if (verticalChallengeCount > 0 && this.currentChallenge) {
           console.log(`[CHALLENGE] Vertical rocket destroyed ${verticalChallengeCount} ${this.currentChallenge.color} gems`)
@@ -1652,7 +2082,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   async triggerFlyAwayLightBallCombo (flyAwayCell: Cell, lightBallCell: Cell): Promise<void> {
-    console.log('🚁⚡ FLY-AWAY + LIGHT BALL COMBO! MULTI-TARGET STRIKE!')
+    console.log('🚁⚡ FLY-AWAY + LIGHT BALL COMBO! FLY-AWAY DELIVERS COLOR BOMB!')
 
     // Play sounds
     this.sound.play('rocket', { volume: 0.5 })
@@ -1666,64 +2096,68 @@ export default class GameScene extends Phaser.Scene {
     this.markCellForDestructionImmediate(flyAwayCell)
     this.markCellForDestructionImmediate(lightBallCell)
 
-    // Find 3 best targets and strike them all
-    const targets: Cell[] = []
-    for (let i = 0; i < 3; i++) {
-      const usedCells = new Set(targets)
-      const target = this.findBestFlyAwayTarget(flyAwayCell, usedCells)
-      if (target) targets.push(target)
+    // Fly-away picks one random target
+    const target = this.findBestFlyAwayTarget(flyAwayCell, new Set())
+
+    if (!target) {
+      console.log('[FLY-AWAY + LIGHT-BALL] No valid target found')
+      return
     }
 
-    // Animate and destroy each target with enhanced effects
-    for (const target of targets) {
-      const startX = flyAwayCell.column * CELL_SIZE + CELL_SIZE / 2
-      const startY = flyAwayCell.row * CELL_SIZE + CELL_SIZE / 2
-      const endX = target.column * CELL_SIZE + CELL_SIZE / 2
-      const endY = target.row * CELL_SIZE + CELL_SIZE / 2
+    console.log(`[FLY-AWAY + LIGHT-BALL] Delivering color bomb to [${target.row}, ${target.column}] (${target.color})`)
 
-      // Create flying sprite
-      const flyingSprite = this.add.sprite(startX, startY, 'fly-away')
-        .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
-        .setDepth(2000)
-        .setTint(0xff00ff) // Purple tint for combo
+    const startX = flyAwayCell.column * CELL_SIZE + CELL_SIZE / 2
+    const startY = flyAwayCell.row * CELL_SIZE + CELL_SIZE / 2
+    const endX = target.column * CELL_SIZE + CELL_SIZE / 2
+    const endY = target.row * CELL_SIZE + CELL_SIZE / 2
 
-      // Quick flight animation
-      await new Promise<void>(resolve => {
-        this.tweens.add({
-          targets: flyingSprite,
-          x: endX,
-          y: endY,
-          angle: 720,
-          duration: 600,
-          ease: 'Cubic.easeInOut',
-          onComplete: () => {
-            // Create explosion
-            const particles = this.add.particles(endX, endY, 'particle', {
-              speed: { min: 100, max: 200 },
-              scale: { start: 0.8, end: 0 },
-              alpha: { start: 1, end: 0 },
-              lifespan: 600,
-              quantity: 30,
-              tint: 0xff00ff,
-              blendMode: 'ADD'
-            })
-            this.time.delayedCall(700, () => particles.destroy())
+    // Create flying color bomb sprite
+    const flyingSprite = this.add.sprite(startX, startY, 'light-ball')
+      .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+      .setDepth(2000)
+      .setTint(0xff00ff) // Purple tint for combo
 
-            // Destroy target and surrounding cells
-            for (const dir of [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }]) {
-              const targetRow = target.row + dir.dr
-              const targetCol = target.column + dir.dc
-              if (targetRow >= 0 && targetRow < size && targetCol >= 0 && targetCol < size) {
-                this.markCellForDestructionImmediate(this.board[targetRow][targetCol])
-              }
-            }
-            this.markCellForDestructionImmediate(target)
-
-            flyingSprite.destroy()
-            resolve()
-          }
-        })
+    // Flight animation
+    await new Promise<void>(resolve => {
+      this.tweens.add({
+        targets: flyingSprite,
+        x: endX,
+        y: endY,
+        angle: 720,
+        duration: 600,
+        ease: 'Cubic.easeInOut',
+        onComplete: () => {
+          flyingSprite.destroy()
+          resolve()
+        }
       })
+    })
+
+    // Color bomb activates at the target location
+    // Destroy all gems of the target's color
+    const targetColor = target.color
+    console.log(`[FLY-AWAY + LIGHT-BALL] Color bomb explodes at target! Destroying all ${targetColor} gems`)
+
+    // Create massive explosion at target
+    const particles = this.add.particles(endX, endY, 'particle', {
+      speed: { min: 200, max: 400 },
+      scale: { start: 1.2, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 800,
+      quantity: 50,
+      tint: 0xffffff,
+      blendMode: 'ADD'
+    })
+    this.time.delayedCall(900, () => particles.destroy())
+
+    // Destroy all gems of the target's color across the entire board
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const cell = this.board[row][col]
+        if (!cell.empty && cell.color === targetColor) {
+          this.markCellForDestructionImmediate(cell)
+        }
+      }
     }
   }
 
@@ -1934,7 +2368,7 @@ export default class GameScene extends Phaser.Scene {
 
               // Wait for destruction animations to complete using Promise
               await new Promise<void>(resolveDestruction => {
-                this.time.delayedCall(destroyDuration, () => resolveDestruction())
+                this.time.delayedCall(this.duration(destroyDuration), () => resolveDestruction())
               })
 
               // Now trigger the fall/refill/cascade logic
@@ -1967,35 +2401,11 @@ export default class GameScene extends Phaser.Scene {
 
   createPowerUpEffect (x: number, y: number, powerUpType: PowerUpType, cell: Cell) {
     if (powerUpType === 'horizontal-rocket') {
-      // Create horizontal laser effect
-      for (let col = 0; col < size; col++) {
-        const particleX = col * CELL_SIZE + CELL_SIZE / 2
-        const particles = this.add.particles(particleX, y, 'particle', {
-          speed: { min: 50, max: 100 },
-          scale: { start: 0.4, end: 0 },
-          alpha: { start: 1, end: 0 },
-          lifespan: 300,
-          quantity: 5,
-          tint: 0xff6600,
-          blendMode: 'ADD'
-        })
-        this.time.delayedCall(400, () => particles.destroy())
-      }
+      // Particle effects are now created inline during destruction waves
+      // (See horizontal-rocket case in triggerPowerUp)
     } else if (powerUpType === 'vertical-rocket') {
-      // Create vertical laser effect
-      for (let row = 0; row < size; row++) {
-        const particleY = row * CELL_SIZE + CELL_SIZE / 2
-        const particles = this.add.particles(x, particleY, 'particle', {
-          speed: { min: 50, max: 100 },
-          scale: { start: 0.4, end: 0 },
-          alpha: { start: 1, end: 0 },
-          lifespan: 300,
-          quantity: 5,
-          tint: 0xff6600,
-          blendMode: 'ADD'
-        })
-        this.time.delayedCall(400, () => particles.destroy())
-      }
+      // Particle effects are now created inline during destruction waves
+      // (See vertical-rocket case in triggerPowerUp)
     } else if (powerUpType === 'light-ball') {
       // Create massive rainbow explosion
       const particles = this.add.particles(x, y, 'particle', {
@@ -2111,7 +2521,7 @@ export default class GameScene extends Phaser.Scene {
 
         const x = column * CELL_SIZE + CELL_SIZE / 2
         const y = (row - numberOfEmptyCells) * CELL_SIZE + CELL_SIZE / 2
-        cell.sprite = this.add.sprite(x, y, cell.color)
+        cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
           .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)  // Scale to fit cell with small margin
           .setInteractive({ draggable: true })
       }
@@ -2125,7 +2535,7 @@ export default class GameScene extends Phaser.Scene {
           console.warn(`[REFILL] Cell [${row},${col}] is non-empty but has no sprite! Creating sprite for ${cell.color}`)
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
           cell.markedForDestruction = false
@@ -2155,7 +2565,7 @@ export default class GameScene extends Phaser.Scene {
             targets: sprite,
             x: expectedX,
             y: expectedY,
-            duration: swapDuration,
+            duration: this.duration(swapDuration),
             onComplete: () => resolve()
           })
         })
@@ -2227,12 +2637,11 @@ export default class GameScene extends Phaser.Scene {
       // Create particle explosion
       this.createGemParticles(cell)
 
-      // Simple pop: scale up slightly and fade out quickly
+      // Simple fade out (no scaling)
       this.tweens.add({
         targets: cell.sprite,
-        scale: 1.3,
         alpha: 0,
-        duration: destroyDuration,
+        duration: this.duration(destroyDuration),
         ease: 'Cubic.easeOut',
         onComplete: () => {
           // IMPORTANT: Destroy the sprite to prevent ghost gems
@@ -2470,7 +2879,7 @@ export default class GameScene extends Phaser.Scene {
             cascades++
 
             // Update combo display
-            this.updateComboDisplay(cascades + 1)
+            this.updateComboDisplay(cascades)
           }
 
           // Reset combo after cascades finish
@@ -2622,7 +3031,7 @@ export default class GameScene extends Phaser.Scene {
             cascades++
 
             // Update combo display
-            this.updateComboDisplay(cascades + 1)
+            this.updateComboDisplay(cascades)
           }
 
           // Then continue with regular cascade loop for any subsequent matches or special patterns
@@ -2667,7 +3076,7 @@ export default class GameScene extends Phaser.Scene {
             cascades++
 
             // Update combo display
-            this.updateComboDisplay(cascades + 1)
+            this.updateComboDisplay(cascades)
           }
 
           // Reset combo after cascades finish
@@ -2907,7 +3316,7 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -2950,7 +3359,7 @@ export default class GameScene extends Phaser.Scene {
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
 
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -2995,7 +3404,7 @@ export default class GameScene extends Phaser.Scene {
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
 
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3007,6 +3416,191 @@ export default class GameScene extends Phaser.Scene {
       console.log(`[DEBUG] Loaded ${name} with 2 horizontal rockets at [4,3] and [4,4]`)
       console.log('[DEBUG] Drag one horizontal rocket onto the other to test the combo')
       console.log('[DEBUG] Expected: One clears row 4, the other clears column where dropped')
+      return
+    }
+
+    if (name === 'rocket-match-order') {
+      // Test board for verifying power-up creation order when swapping a rocket into a match
+      // The rocket swap should CREATE the new power-up from the match BEFORE triggering the rocket
+      const rocketMatchOrderBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'green', 'blue', 'green', 'red', 'blue', 'red', 'green'],
+        ['yellow', 'pink', 'blue', 'green', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'green', 'red', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = rocketMatchOrderBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn a vertical rocket at [2, 2]
+      this.spawnPowerup('vertical-rocket', 2, 2)
+
+      console.log(`[DEBUG] Loaded ${name}`)
+      console.log('[DEBUG] Vertical rocket at [2,2]. Green gems form a 2x2 at rows 2-3, cols 3-4')
+      console.log('[DEBUG] Swap rocket at [2,2] with green at [2,3]')
+      console.log('[DEBUG] Expected: Creates fly-away from 2x2 match BEFORE triggering rocket')
+      console.log('[DEBUG] The fly-away should be created at the swap position, then rocket clears column')
+      return
+    }
+
+    if (name === 'light-ball-combo') {
+      // Load a simple test board for light-ball + light-ball combo testing
+      const lightBallComboBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = lightBallComboBoard[row][col]
+
+          // Destroy existing sprite if it exists
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn two light-balls horizontally adjacent to each other (side by side)
+      this.spawnPowerup('light-ball', 4, 3)
+      this.spawnPowerup('light-ball', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with 2 light-balls at [4,3] and [4,4]`)
+      console.log('[DEBUG] Swap the two light-balls to test the board clear combo')
+      console.log('[DEBUG] Expected: Entire board cleared with rainbow explosion')
+      return
+    }
+
+    if (name === 'level5-snapshot') {
+      // Load a test board matching the Level 5 screenshot with powerups
+      const level5Board = [
+        ['blue', 'red', 'blue', 'yellow', 'blue', 'blue', 'yellow', 'blue'],
+        ['red', 'blue', 'red', 'green', 'blue', 'blue', 'green', 'yellow'],
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'green'],
+        ['blue', 'blue', 'blue', 'yellow', 'blue', 'green', 'yellow', 'yellow'],
+        ['red', 'yellow', 'blue', 'green', 'blue', 'blue', 'blue', 'red'],
+        ['blue', 'blue', 'red', 'blue', 'blue', 'blue', 'red', 'yellow'],
+        ['blue', 'blue', 'blue', 'yellow', 'red', 'blue', 'green', 'red'],
+        ['blue', 'blue', 'blue', 'green', 'blue', 'blue', 'yellow', 'blue']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = level5Board[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Add the vertical rocket at row 2, col 4
+      this.spawnPowerup('vertical-rocket', 2, 4)
+
+      // Add the light-ball (color bomb) at row 5, col 5
+      this.spawnPowerup('light-ball', 5, 5)
+
+      // Give the player 4 hammers to match the screenshot
+      LevelSystem.setHammers(4)
+      this.registry.events.emit('HAMMERS_UPDATED')
+
+      console.log(`[DEBUG] Loaded ${name} matching Level 5 screenshot`)
+      console.log('[DEBUG] Vertical rocket at [2,4], Light-ball at [5,5], 4 hammers')
+      return
+    }
+
+    if (name === 'hammer-test') {
+      // Load a test board for hammer testing with some hard-to-reach gems
+      const hammerTestBoard = [
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue'],
+        ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'],
+        ['green', 'green', 'green', 'green', 'green', 'green', 'green', 'green'],
+        ['yellow', 'yellow', 'yellow', 'yellow', 'yellow', 'yellow', 'yellow', 'yellow'],
+        ['pink', 'pink', 'pink', 'pink', 'pink', 'pink', 'pink', 'pink'],
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue', 'blue'],
+        ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'],
+        ['green', 'green', 'green', 'green', 'green', 'green', 'green', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = hammerTestBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Give the player 3 hammers to test with
+      LevelSystem.addHammers(3)
+      this.registry.events.emit('HAMMERS_UPDATED')
+
+      console.log(`[DEBUG] Loaded ${name} with 3 hammers`)
+      console.log('[DEBUG] This board has no easy matches - use the hammer to break the deadlock')
+      console.log('[DEBUG] Click the hammer icon in the menu, then click any gem to destroy it')
       return
     }
 
@@ -3039,7 +3633,7 @@ export default class GameScene extends Phaser.Scene {
 
           const x = col * CELL_SIZE + CELL_SIZE / 2
           const y = row * CELL_SIZE + CELL_SIZE / 2
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
@@ -3151,8 +3745,9 @@ export default class GameScene extends Phaser.Scene {
         ['green', 'yellow', 'pink', 'blue', 'green', 'yellow', 'pink', 'blue'],
         ['pink', 'blue', 'green', 'yellow', 'pink', 'blue', 'green', 'yellow']
       ],
+      // Horizontal 4-match test: Swap red [0,3] with blue [0,4] to create horizontal rocket
       match4h: [
-        ['blue', 'blue', 'blue', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['blue', 'blue', 'blue', 'red', 'blue', 'green', 'yellow', 'pink'],
         ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
         ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
         ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
@@ -3161,12 +3756,13 @@ export default class GameScene extends Phaser.Scene {
         ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
         ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
       ],
+      // Vertical 4-match test: Swap green [3,0] with red [4,0] to create vertical rocket
       match4v: [
         ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
         ['red', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
         ['red', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
-        ['red', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
-        ['pink', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['green', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['red', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
         ['yellow', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
         ['blue', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
         ['yellow', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow']
@@ -3281,7 +3877,7 @@ export default class GameScene extends Phaser.Scene {
             console.error(`[DEBUG] Texture '${cell.color}' does not exist at [${row},${col}]!`)
           }
 
-          cell.sprite = this.add.sprite(x, y, cell.color)
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
             .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
             .setInteractive({ draggable: true })
         }
