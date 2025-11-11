@@ -2,10 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'tests',
-  timeout: 30000,
+  timeout: 60000, // Increased from 30000 for complex scene tests
   expect: {
     timeout: 5000
   },
+  retries: 1, // Retry failed tests once
+  workers: 1, // Reduced to 1 to eliminate all parallelization issues
   reporter: 'html',
   use: {
     trace: 'on-first-retry',

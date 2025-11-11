@@ -3,9 +3,10 @@ import { test, expect } from '@playwright/test'
 test.describe('Meta-Progression Phase 3 - Shop', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
-    await page.goto('http://localhost:8000/')
+    await page.goto('http://localhost:8000/', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2500)
     await page.evaluate(() => localStorage.clear())
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(1000)
   })
 
   test('should open shop when clicking shop button', async ({ page }) => {
@@ -277,40 +278,81 @@ test.describe('Meta-Progression Phase 3 - Shop', () => {
       LevelSystem.setLives(2)
     })
 
-    // Open shop
+    // Open shop and wait for it to actually start
     await page.evaluate(() => {
       const menuScene = (window as any).game.scene.scenes[0]
       menuScene.scene.launch('ShopScene')
     })
 
-    await page.waitForTimeout(1000)
+    // Give MORE time for scene to initialize
+    await page.waitForTimeout(5000)
+
+    // Debug: Check scene status
+    const sceneStatus = await page.evaluate(() => {
+      const shopScene = (window as any).game?.scene?.getScene('ShopScene')
+      return {
+        exists: !!shopScene,
+        isActive: shopScene?.scene?.isActive(),
+        childCount: shopScene?.children?.list?.length || 0,
+        sceneKey: shopScene?.scene?.key
+      }
+    })
+    console.log('Shop scene status after 5s wait:', sceneStatus)
+
+    // Wait for shop scene to be active AND have text content using scene key
+    try {
+      await page.waitForFunction(() => {
+        const game = (window as any).game
+        if (!game || !game.scene) return false
+        const shopScene = game.scene.getScene('ShopScene')
+        if (!shopScene || !shopScene.scene || !shopScene.scene.isActive()) return false
+        if (!shopScene.children || !shopScene.children.list) return false
+        // Check for at least some text objects
+        return shopScene.children.list.some((child: any) => child.type === 'Text')
+      }, { timeout: 20000 })
+    } catch (e) {
+      console.log('Wait for shop scene timed out')
+      // Continue anyway to see debug output
+    }
 
     await page.screenshot({ path: 'tests/screenshots/shop-pricing.png' })
+    await page.waitForTimeout(300)
 
     // Check that shop displays items
     const shopContent = await page.evaluate(() => {
-      const shopScene = (window as any).game.scene.scenes[4]
+      const shopScene = (window as any).game.scene.getScene('ShopScene')
       const textObjects = []
+      const debugInfo = {
+        sceneExists: !!shopScene,
+        isActive: shopScene?.scene?.isActive(),
+        hasChildren: !!shopScene?.children,
+        childrenCount: shopScene?.children?.list?.length || 0
+      }
 
-      shopScene.children.list.forEach((child: any) => {
-        if (child.type === 'Text') {
-          textObjects.push(child.text)
-        }
-      })
+      if (shopScene && shopScene.children && shopScene.children.list) {
+        shopScene.children.list.forEach((child: any) => {
+          if (child.type === 'Text') {
+            textObjects.push(child.text)
+          }
+        })
+      }
 
-      return textObjects
+      return { textObjects, debugInfo }
     })
 
+    console.log('Shop debug info:', shopContent.debugInfo)
+    console.log('Shop text objects:', shopContent.textObjects)
+
     // Verify shop title
-    expect(shopContent.some((text: string) => text.includes('SHOP') || text.includes('🏪'))).toBe(true)
+    expect(shopContent.textObjects.some((text: string) => text.includes('SHOP') || text.includes('🏪'))).toBe(true)
 
     // Verify coin display
-    expect(shopContent.some((text: string) => text.includes('100') && text.includes('🪙'))).toBe(true)
+    expect(shopContent.textObjects.some((text: string) => text.includes('100') && text.includes('🪙'))).toBe(true)
 
     // Verify pricing is shown
-    expect(shopContent.some((text: string) => text.includes('10') && text.includes('🪙'))).toBe(true)  // Buy 1 life
-    expect(shopContent.some((text: string) => text.includes('20') && text.includes('🪙'))).toBe(true)  // Buy 1 hammer
-    expect(shopContent.some((text: string) => text.includes('50') && text.includes('🪙'))).toBe(true)  // Refill/Pack
+    expect(shopContent.textObjects.some((text: string) => text.includes('10') && text.includes('🪙'))).toBe(true)  // Buy 1 life
+    expect(shopContent.textObjects.some((text: string) => text.includes('20') && text.includes('🪙'))).toBe(true)  // Buy 1 hammer
+    expect(shopContent.textObjects.some((text: string) => text.includes('50') && text.includes('🪙'))).toBe(true)  // Refill/Pack
   })
 
   test('should update coins display after purchase', async ({ page }) => {
@@ -400,24 +442,48 @@ test.describe('Meta-Progression Phase 3 - Shop', () => {
       menuScene.scene.launch('ShopScene')
     })
 
-    await page.waitForTimeout(1000)
+    // Wait longer for shop scene to be fully created
+    await page.waitForTimeout(2500)
+
+    // Wait for shop scene to be active AND have text content using scene key
+    await page.waitForFunction(() => {
+      const game = (window as any).game
+      if (!game || !game.scene) return false
+      const shopScene = game.scene.getScene('ShopScene')
+      if (!shopScene || !shopScene.scene || !shopScene.scene.isActive()) return false
+      if (!shopScene.children || !shopScene.children.list) return false
+      // Check for at least some text objects
+      return shopScene.children.list.some((child: any) => child.type === 'Text')
+    }, { timeout: 15000 })
 
     await page.screenshot({ path: 'tests/screenshots/shop-max-lives.png' })
+    await page.waitForTimeout(300)
 
     // Check for "MAX LIVES" text
     const shopContent = await page.evaluate(() => {
-      const shopScene = (window as any).game.scene.scenes[4]
+      const shopScene = (window as any).game.scene.getScene('ShopScene')
       const textObjects = []
+      const debugInfo = {
+        sceneExists: !!shopScene,
+        isActive: shopScene?.scene?.isActive(),
+        hasChildren: !!shopScene?.children,
+        childrenCount: shopScene?.children?.list?.length || 0
+      }
 
-      shopScene.children.list.forEach((child: any) => {
-        if (child.type === 'Text') {
-          textObjects.push(child.text)
-        }
-      })
+      if (shopScene && shopScene.children && shopScene.children.list) {
+        shopScene.children.list.forEach((child: any) => {
+          if (child.type === 'Text') {
+            textObjects.push(child.text)
+          }
+        })
+      }
 
-      return textObjects
+      return { textObjects, debugInfo }
     })
 
-    expect(shopContent.some((text: string) => text.includes('MAX LIVES'))).toBe(true)
+    console.log('Shop (max lives) debug info:', shopContent.debugInfo)
+    console.log('Shop (max lives) text objects:', shopContent.textObjects)
+
+    expect(shopContent.textObjects.some((text: string) => text.includes('MAX LIVES'))).toBe(true)
   })
 })

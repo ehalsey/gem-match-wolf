@@ -3,8 +3,10 @@ import { test, expect } from '@playwright/test'
 test.describe('Meta-Progression Phase 2 - Stars and Rewards', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
-    await page.goto('http://localhost:8000/')
+    await page.goto('http://localhost:8000/', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2500)
     await page.evaluate(() => localStorage.clear())
+    await page.waitForTimeout(1000)
   })
 
   test('should calculate 1 star for low score on easy level', async ({ page }) => {
@@ -315,8 +317,8 @@ test.describe('Meta-Progression Phase 2 - Stars and Rewards', () => {
   })
 
   test('should show NEW BEST indicator when beating previous best', async ({ page }) => {
-    await page.goto('http://localhost:8000/?debug=true')
-    await page.waitForTimeout(1000)
+    await page.goto('http://localhost:8000/?debug=true', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2000)
 
     // First, complete level with low score
     await page.evaluate(() => {
@@ -328,7 +330,7 @@ test.describe('Meta-Progression Phase 2 - Stars and Rewards', () => {
       gameScene.gameOver('Level Complete!', true, false)
     })
 
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(1500)
 
     // Click "Next Level" to proceed
     await page.evaluate(() => {
@@ -337,7 +339,7 @@ test.describe('Meta-Progression Phase 2 - Stars and Rewards', () => {
       levelCompleteScene.scene.stop()
     })
 
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(1000)
 
     // Now complete same level again with higher score
     await page.evaluate(() => {
@@ -349,23 +351,40 @@ test.describe('Meta-Progression Phase 2 - Stars and Rewards', () => {
       gameScene.gameOver('Level Complete!', true, false)
     })
 
-    await page.waitForTimeout(1500)
+    // Wait longer for scene to be fully created
+    await page.waitForTimeout(3000)
+
+    // Wait for scene to be active AND have content using scene key
+    await page.waitForFunction(() => {
+      const game = (window as any).game
+      if (!game || !game.scene) return false
+      const scene = game.scene.getScene('LevelCompleteScene')
+      if (!scene || !scene.scene || !scene.scene.isActive()) return false
+      if (!scene.children || !scene.children.list) return false
+      // Check for at least some text objects
+      return scene.children.list.some((child: any) => child.type === 'Text')
+    }, { timeout: 15000 })
 
     await page.screenshot({ path: 'tests/screenshots/level-complete-new-best.png' })
+    await page.waitForTimeout(500)
 
     const sceneContent = await page.evaluate(() => {
       // @ts-ignore
-      const levelCompleteScene = window.game.scene.scenes[3]
+      const levelCompleteScene = window.game.scene.getScene('LevelCompleteScene')
       const textObjects = []
 
-      levelCompleteScene.children.list.forEach((child: any) => {
-        if (child.type === 'Text') {
-          textObjects.push(child.text)
-        }
-      })
+      if (levelCompleteScene && levelCompleteScene.children && levelCompleteScene.children.list) {
+        levelCompleteScene.children.list.forEach((child: any) => {
+          if (child.type === 'Text') {
+            textObjects.push(child.text)
+          }
+        })
+      }
 
       return textObjects
     })
+
+    console.log('Scene content for NEW BEST test:', sceneContent)
 
     // Check for NEW BEST indicator
     const hasNewBest = sceneContent.some((text: string) => text.includes('NEW BEST'))

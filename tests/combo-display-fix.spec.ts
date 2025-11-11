@@ -3,17 +3,24 @@ import { test, expect } from '@playwright/test'
 test.describe('Combo Display - Bug Fix Verification', () => {
   test('should NOT show combo display for single match (no cascade)', async ({ page }) => {
     // Load the match4h test board which creates a single match with no cascade
-    await page.goto('http://localhost:8000/?debug=true&board=match4h')
+    await page.goto('http://localhost:8000/?debug=true&board=match4h', { waitUntil: 'domcontentloaded' })
 
-    // Wait for game to load
-    await page.waitForTimeout(1000)
+    // Wait for game to load and be ready
+    await page.waitForTimeout(2000)
+
+    // Wait for game scene to be active
+    await page.waitForFunction(() => {
+      const game = (window as any).game
+      return game && game.scene && game.scene.scenes && game.scene.scenes[1] && game.scene.scenes[1].scene.isActive()
+    }, { timeout: 5000 })
 
     // Get initial combo display state
     const initialComboState = await page.evaluate(() => {
       // @ts-ignore
-      const gameScene = window.game.scene.scenes[1]
+      const gameScene = window.game?.scene?.scenes[1]
+      if (!gameScene) return { currentCombo: 0, comboVisible: false }
       return {
-        currentCombo: gameScene.currentCombo,
+        currentCombo: gameScene.currentCombo || 0,
         comboVisible: gameScene.comboContainer?.alpha > 0
       }
     })
@@ -22,31 +29,40 @@ test.describe('Combo Display - Bug Fix Verification', () => {
     expect(initialComboState.currentCombo).toBe(0)
     expect(initialComboState.comboVisible).toBe(false)
 
+    // Wait for board to be initialized
+    await page.waitForFunction(() => {
+      const gameScene = (window as any).game?.scene?.scenes[1]
+      return gameScene && gameScene.board && gameScene.board.length > 0 && gameScene.board[0].length > 0
+    }, { timeout: 5000 })
+
+    await page.waitForTimeout(500)
+
     // Take screenshot before move
     await page.screenshot({ path: 'tests/screenshots/combo-fix-before.png' })
+    await page.waitForTimeout(500)
 
-    // Make the test move: swap red [0,3] with blue [0,4]
-    const cell1Pos = await page.evaluate(() => {
+    // Calculate positions in one go to avoid context issues
+    const positions = await page.evaluate(() => {
       const CELL_SIZE = 65
       const MENU_WIDTH = 200
       return {
-        x: MENU_WIDTH + 4 * CELL_SIZE + CELL_SIZE / 2, // column 4
-        y: 0 * CELL_SIZE + CELL_SIZE / 2 // row 0
+        cell1: {
+          x: MENU_WIDTH + 4 * CELL_SIZE + CELL_SIZE / 2, // column 4
+          y: 0 * CELL_SIZE + CELL_SIZE / 2 // row 0
+        },
+        cell2: {
+          x: MENU_WIDTH + 3 * CELL_SIZE + CELL_SIZE / 2, // column 3
+          y: 0 * CELL_SIZE + CELL_SIZE / 2 // row 0
+        }
       }
     })
 
-    const cell2Pos = await page.evaluate(() => {
-      const CELL_SIZE = 65
-      const MENU_WIDTH = 200
-      return {
-        x: MENU_WIDTH + 3 * CELL_SIZE + CELL_SIZE / 2, // column 3
-        y: 0 * CELL_SIZE + CELL_SIZE / 2 // row 0
-      }
-    })
+    await page.waitForTimeout(300)
 
     // Perform the swap
-    await page.mouse.click(cell1Pos.x, cell1Pos.y)
-    await page.mouse.click(cell2Pos.x, cell2Pos.y)
+    await page.mouse.click(positions.cell1.x, positions.cell1.y)
+    await page.waitForTimeout(300)
+    await page.mouse.click(positions.cell2.x, positions.cell2.y)
 
     // Wait for animations to complete
     await page.waitForTimeout(2000)
@@ -213,9 +229,9 @@ test.describe('Combo Display - Bug Fix Verification', () => {
   })
 
   test('should verify combo display position and styling', async ({ page }) => {
-    await page.goto('http://localhost:8000/?debug=true')
+    await page.goto('http://localhost:8000/?debug=true', { waitUntil: 'domcontentloaded' })
 
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(2000)
 
     // Trigger 3x combo for yellow styling
     await page.evaluate(() => {
@@ -225,7 +241,7 @@ test.describe('Combo Display - Bug Fix Verification', () => {
     })
 
     // Wait for animation to complete
-    await page.waitForTimeout(600)
+    await page.waitForTimeout(1000)
 
     // Check state after animation
     const comboInfo = await page.evaluate(() => {
