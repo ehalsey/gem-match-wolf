@@ -11,15 +11,15 @@ export default defineConfig({
   reporter: 'html',
   use: {
     trace: 'on-first-retry',
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:8000',
     actionTimeout: 0,
     // keep the desktop chrome device settings
     ...devices['Desktop Chrome']
   },
   webServer: {
     // serve the built app (build/) which contains the generated index.html and bundle
-    command: 'npx http-server -c-1 -p 3000 build',
-    port: 3000,
+    command: 'npx http-server -c-1 -p 8000 build',
+    port: 8000,
     timeout: 120_000,
     reuseExistingServer: true
   },
