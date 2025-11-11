@@ -394,8 +394,8 @@ export default class GameScene extends Phaser.Scene {
     const levelGems = this.levelConfig ? this.levelConfig.gemTypes : gems
     const board = this.boardState.getRawBoard()
 
-    for (let row = 0; row < this.size; row++) {
-      for (let column = 0; column < this.size; column++) {
+    for (let row = 0; row < boardConfig.height; row++) {
+      for (let column = 0; column < boardConfig.width; column++) {
         const cell = board[row][column]
         if (!cell) continue  // Skip null cells (for non-rectangular boards)
 
