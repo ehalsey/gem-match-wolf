@@ -176,14 +176,14 @@ export default class GameScene extends Phaser.Scene {
     this.debugGraphics = this.add.graphics()
     this.debugGraphics.setDepth(10000)
 
+    // Initialize level and challenge BEFORE creating the board
+    this.levelConfig = LevelSystem.getCurrentLevelConfig()
+    this.currentChallenge = { ...this.levelConfig.challenge }  // Clone the challenge
+
     this.initBoard()
 
     // Save initial board state for retry functionality
     this.saveInitialBoardState()
-
-    // Initialize level and challenge
-    this.levelConfig = LevelSystem.getCurrentLevelConfig()
-    this.currentChallenge = { ...this.levelConfig.challenge }  // Clone the challenge
 
     // Load level score (resets each level)
     this.setScore(LevelSystem.getLevelScore())
@@ -251,17 +251,18 @@ export default class GameScene extends Phaser.Scene {
     this.isGameOver = false
     this.undoSnapshot = null
     this.destroyBoard()
-    this.initBoard()
-
-    // Save initial board state for retry functionality
-    this.saveInitialBoardState()
 
     // Reset level system to level 1 (this also resets score and lives)
     LevelSystem.reset()
 
-    // Initialize level and challenge
+    // Initialize level and challenge BEFORE creating the board
     this.levelConfig = LevelSystem.getCurrentLevelConfig()
     this.currentChallenge = { ...this.levelConfig.challenge }
+
+    this.initBoard()
+
+    // Save initial board state for retry functionality
+    this.saveInitialBoardState()
 
     // Score already reset to 0 by LevelSystem.reset()
     this.setScore(LevelSystem.getLevelScore())
@@ -281,14 +282,15 @@ export default class GameScene extends Phaser.Scene {
     this.isGameOver = false
     this.undoSnapshot = null
     this.destroyBoard()
+
+    // Load the current level (already advanced in gameOver) BEFORE creating the board
+    this.levelConfig = LevelSystem.getCurrentLevelConfig()
+    this.currentChallenge = { ...this.levelConfig.challenge }
+
     this.initBoard()
 
     // Save initial board state for retry functionality
     this.saveInitialBoardState()
-
-    // Load the current level (already advanced in gameOver)
-    this.levelConfig = LevelSystem.getCurrentLevelConfig()
-    this.currentChallenge = { ...this.levelConfig.challenge }
 
     // Load level score (already reset to 0 in gameOver)
     this.setScore(LevelSystem.getLevelScore())
