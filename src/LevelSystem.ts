@@ -8,6 +8,7 @@
  */
 
 import { getAllGemIds } from './GemConfig'
+import { type BoardConfig } from './game/BoardState'
 
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
@@ -30,6 +31,7 @@ export interface LevelConfig {
   moves: number
   challenge: Challenge
   gemTypes: string[]  // Allowed gem colors for this level
+  boardConfig?: BoardConfig  // Optional board configuration (defaults to 8x8 rectangle)
 }
 
 export interface LevelResult {
@@ -240,6 +242,77 @@ export class LevelSystem {
   }
 
   /**
+   * Get board configuration for a specific level
+   * Returns custom configurations for special levels, or default 8x8 for standard levels
+   */
+  static getBoardConfigForLevel(level: number): BoardConfig {
+    // Special level configurations
+    switch (level) {
+      case 20:
+        // 9x9 rectangular board
+        return {
+          width: 9,
+          height: 9,
+          shape: 'rectangle'
+        }
+
+      case 21:
+        // Octagon shape (9x9 with corners missing)
+        return {
+          width: 9,
+          height: 9,
+          shape: 'octagon',
+          missingCells: [
+            // Top-left corner
+            { row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 },
+            { row: 1, col: 0 }, { row: 1, col: 1 },
+            { row: 2, col: 0 },
+            // Top-right corner
+            { row: 0, col: 6 }, { row: 0, col: 7 }, { row: 0, col: 8 },
+            { row: 1, col: 7 }, { row: 1, col: 8 },
+            { row: 2, col: 8 },
+            // Bottom-left corner
+            { row: 6, col: 0 },
+            { row: 7, col: 0 }, { row: 7, col: 1 },
+            { row: 8, col: 0 }, { row: 8, col: 1 }, { row: 8, col: 2 },
+            // Bottom-right corner
+            { row: 6, col: 8 },
+            { row: 7, col: 7 }, { row: 7, col: 8 },
+            { row: 8, col: 6 }, { row: 8, col: 7 }, { row: 8, col: 8 }
+          ]
+        }
+
+      case 22:
+        // Diamond shape (9x9 with more corners removed)
+        return {
+          width: 9,
+          height: 9,
+          shape: 'diamond',
+          missingCells: [
+            // Top section
+            { row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 }, { row: 0, col: 3 }, { row: 0, col: 5 }, { row: 0, col: 6 }, { row: 0, col: 7 }, { row: 0, col: 8 },
+            { row: 1, col: 0 }, { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 6 }, { row: 1, col: 7 }, { row: 1, col: 8 },
+            { row: 2, col: 0 }, { row: 2, col: 1 }, { row: 2, col: 7 }, { row: 2, col: 8 },
+            { row: 3, col: 0 }, { row: 3, col: 8 },
+            // Bottom section
+            { row: 5, col: 0 }, { row: 5, col: 8 },
+            { row: 6, col: 0 }, { row: 6, col: 1 }, { row: 6, col: 7 }, { row: 6, col: 8 },
+            { row: 7, col: 0 }, { row: 7, col: 1 }, { row: 7, col: 2 }, { row: 7, col: 6 }, { row: 7, col: 7 }, { row: 7, col: 8 },
+            { row: 8, col: 0 }, { row: 8, col: 1 }, { row: 8, col: 2 }, { row: 8, col: 3 }, { row: 8, col: 5 }, { row: 8, col: 6 }, { row: 8, col: 7 }, { row: 8, col: 8 }
+          ]
+        }
+
+      default:
+        // Default 8x8 rectangular board
+        return {
+          width: 8,
+          height: 8,
+          shape: 'rectangle'
+        }
+    }
+  }
+
+  /**
    * Get complete configuration for a level
    */
   static getLevelConfig(level: number): LevelConfig {
@@ -247,13 +320,15 @@ export class LevelSystem {
     const moves = this.getMovesForDifficulty(difficulty)
     const gemTypes = this.getGemTypesForDifficulty(difficulty)
     const challenge = this.generateChallenge(difficulty, gemTypes)
+    const boardConfig = this.getBoardConfigForLevel(level)
 
     return {
       level,
       difficulty,
       moves,
       challenge,
-      gemTypes
+      gemTypes,
+      boardConfig
     }
   }
 

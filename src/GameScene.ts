@@ -374,8 +374,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   initBoard () {
-    // Create BoardState with default 8x8 configuration
-    const boardConfig: BoardConfig = {
+    // Create BoardState using level's configuration (or default 8x8)
+    const boardConfig: BoardConfig = this.levelConfig?.boardConfig || {
       width: size,
       height: size,
       shape: 'rectangle'
