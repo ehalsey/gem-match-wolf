@@ -104,35 +104,60 @@ export class PowerUpSystem {
           // Found a 2x2 square! Position fly-away based on swap direction
           let flyAwayCell = topLeft // default to top-left
 
-          // If we have swap context, determine direction and position accordingly
+          // If we have swap context, use directional logic
           if (swapContext) {
             // Check if any of the swap positions falls within the square bounds
             const squareRowRange = [row, row + 1]
             const squareColRange = [col, col + 1]
-            const isSwapInSquare =
-              (squareRowRange.includes(swapContext.from.row) && squareColRange.includes(swapContext.from.column)) ||
-              (squareRowRange.includes(swapContext.to.row) && squareColRange.includes(swapContext.to.column))
 
-            if (isSwapInSquare) {
-              // Determine horizontal direction of swap
-              const swapFromLeft = swapContext.from.column < swapContext.to.column
-              const swapFromRight = swapContext.from.column > swapContext.to.column
+            const toInSquare = squareRowRange.includes(swapContext.to.row) && squareColRange.includes(swapContext.to.column)
+            const fromInSquare = squareRowRange.includes(swapContext.from.row) && squareColRange.includes(swapContext.from.column)
 
-              console.log(`[FLY-AWAY] Swap detected: from [${swapContext.from.row}, ${swapContext.from.column}] to [${swapContext.to.row}, ${swapContext.to.column}]`)
-              console.log(`[FLY-AWAY] Direction: ${swapFromRight ? 'RIGHT-TO-LEFT' : swapFromLeft ? 'LEFT-TO-RIGHT' : 'VERTICAL'}`)
+            console.log(`[FLY-AWAY] Swap detected: from [${swapContext.from.row}, ${swapContext.from.column}] to [${swapContext.to.row}, ${swapContext.to.column}]`)
+            console.log(`[FLY-AWAY] 2x2 square at [${row}, ${col}], to in square: ${toInSquare}, from in square: ${fromInSquare}`)
+
+            if (toInSquare || fromInSquare) {
+              // Determine swap direction
+              const swapFromLeft = swapContext.from.column < swapContext.to.column // moving right
+              const swapFromRight = swapContext.from.column > swapContext.to.column // moving left
+              const isVerticalSwap = swapContext.from.column === swapContext.to.column
 
               if (swapFromRight) {
-                // Match made from right → position at lower right (bottomRight)
-                flyAwayCell = bottomRight
-                console.log(`[FLY-AWAY] Positioning at bottom-right [${bottomRight.row}, ${bottomRight.column}]`)
+                // RIGHT-to-LEFT: place on the left side (top-left)
+                flyAwayCell = topLeft
+                console.log(`[FLY-AWAY] RIGHT-to-LEFT swap → placing at top-left [${topLeft.row}, ${topLeft.column}]`)
               } else if (swapFromLeft) {
-                // Match made from left → position at lower left (bottomLeft)
+                // LEFT-to-RIGHT: place on bottom-left
                 flyAwayCell = bottomLeft
-                console.log(`[FLY-AWAY] Positioning at bottom-left [${bottomLeft.row}, ${bottomLeft.column}]`)
-              } else {
-                console.log(`[FLY-AWAY] Positioning at default top-left [${topLeft.row}, ${topLeft.column}]`)
+                console.log(`[FLY-AWAY] LEFT-to-RIGHT swap → placing at bottom-left [${bottomLeft.row}, ${bottomLeft.column}]`)
+              } else if (isVerticalSwap) {
+                // VERTICAL: prefer swap 'to' position
+                if (toInSquare) {
+                  if (swapContext.to.row === row && swapContext.to.column === col) {
+                    flyAwayCell = topLeft
+                  } else if (swapContext.to.row === row && swapContext.to.column === col + 1) {
+                    flyAwayCell = topRight
+                  } else if (swapContext.to.row === row + 1 && swapContext.to.column === col) {
+                    flyAwayCell = bottomLeft
+                  } else if (swapContext.to.row === row + 1 && swapContext.to.column === col + 1) {
+                    flyAwayCell = bottomRight
+                  }
+                  console.log(`[FLY-AWAY] VERTICAL swap → placing at 'to' position [${flyAwayCell.row}, ${flyAwayCell.column}]`)
+                } else if (fromInSquare) {
+                  if (swapContext.from.row === row && swapContext.from.column === col) {
+                    flyAwayCell = topLeft
+                  } else if (swapContext.from.row === row && swapContext.from.column === col + 1) {
+                    flyAwayCell = topRight
+                  } else if (swapContext.from.row === row + 1 && swapContext.from.column === col) {
+                    flyAwayCell = bottomLeft
+                  } else if (swapContext.from.row === row + 1 && swapContext.from.column === col + 1) {
+                    flyAwayCell = bottomRight
+                  }
+                  console.log(`[FLY-AWAY] VERTICAL swap → placing at 'from' position [${flyAwayCell.row}, ${flyAwayCell.column}]`)
+                }
               }
-              // Note: vertical swaps default to topLeft (original behavior)
+            } else {
+              console.log(`[FLY-AWAY] Swap not in square - using default top-left [${topLeft.row}, ${topLeft.column}]`)
             }
           }
 
@@ -348,9 +373,33 @@ export class PowerUpSystem {
         // Determine if chain is horizontal or vertical
         const isHorizontal = chain[0].row === chain[1].row
 
-        // Choose the middle cell for the power-up
-        const middleIndex = Math.floor(chain.length / 2)
-        const powerUpCell = chain[middleIndex]
+        // Choose power-up cell position
+        let powerUpCell: Cell
+
+        // If we have swap context, place power-up at one of the swap positions (if in chain)
+        if (swapContext) {
+          const fromCell = chain.find(c => c.row === swapContext.from.row && c.column === swapContext.from.column)
+          const toCell = chain.find(c => c.row === swapContext.to.row && c.column === swapContext.to.column)
+
+          // Prefer the 'to' position (where the gem was moved to), or fall back to 'from'
+          if (toCell) {
+            powerUpCell = toCell
+            console.log(`[ROCKET POSITION] Placing ${isHorizontal ? 'horizontal' : 'vertical'} rocket at swap 'to' position: [${powerUpCell.row}, ${powerUpCell.column}]`)
+          } else if (fromCell) {
+            powerUpCell = fromCell
+            console.log(`[ROCKET POSITION] Placing ${isHorizontal ? 'horizontal' : 'vertical'} rocket at swap 'from' position: [${powerUpCell.row}, ${powerUpCell.column}]`)
+          } else {
+            // Swap positions not in chain - this shouldn't happen for user swaps but could for cascades
+            powerUpCell = chain[Math.floor(chain.length / 2)]
+            console.warn(`[ROCKET POSITION] WARNING: Swap context provided but neither swap position is in chain! Using middle cell: [${powerUpCell.row}, ${powerUpCell.column}]`)
+            console.warn(`  Swap was from [${swapContext.from.row}, ${swapContext.from.column}] to [${swapContext.to.row}, ${swapContext.to.column}]`)
+            console.warn(`  Chain cells:`, chain.map(c => `[${c.row}, ${c.column}]`))
+          }
+        } else {
+          // No swap context, use middle cell
+          powerUpCell = chain[Math.floor(chain.length / 2)]
+          console.log(`[ROCKET POSITION] No swap context - placing ${isHorizontal ? 'horizontal' : 'vertical'} rocket at middle of chain: [${powerUpCell.row}, ${powerUpCell.column}]`)
+        }
 
         // Determine power-up type and priority based on chain length
         let powerUpType: PowerUpType

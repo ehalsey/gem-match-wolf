@@ -53,6 +53,7 @@ export default class GameScene extends Phaser.Scene {
   comboContainer: Phaser.GameObjects.Container | null
   winningMovesCache: { hash: string, moves: { cell1: Cell, cell2: Cell }[] } | null
   hammerModeActive: boolean
+  bugReportFirstCell: Cell | null
   gameSpeed: number
 
   constructor () {
@@ -140,12 +141,14 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - gameDebug.captureMove(fromRow, fromCol, toRow, toCol, expectedBehavior) - Bug reporting tool')
       console.log('[DEBUG] Keyboard shortcuts:')
       console.log('  - U or Z: Undo last move')
+      console.log('[DEBUG] Bug Reporting:')
+      console.log('  - Shift+Click first gem → Shift+Click second gem → Enter description')
       console.log('[DEBUG] URL Parameters:')
       console.log('  - ?speed=0.5 - Slow down animations (0.5 = half speed, 2.0 = double speed)')
       console.log('  - ?debug=true - Enable debug mode')
       console.log('  - ?board=match4h - Load test board')
       console.log('  - ?seed=12345 - Set random seed')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, hammer-test, level5-snapshot')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, rocket-match-order, light-ball-combo, hammer-test, level5-snapshot')
     }
 
     this.createBackground()
@@ -191,6 +194,9 @@ export default class GameScene extends Phaser.Scene {
 
     // Initialize hammer mode
     this.hammerModeActive = false
+
+    // Initialize bug report tracking
+    this.bugReportFirstCell = null
 
     // Expose debug commands to console (always available)
     this.exposeDebugCommands()
@@ -442,6 +448,9 @@ export default class GameScene extends Phaser.Scene {
 
     this.currentCombo = combo
 
+    // Stop any existing tweens on the combo container to prevent conflicts
+    this.tweens.killTweensOf(this.comboContainer)
+
     if (combo <= 1) {
       // Hide combo display for no combo or first cascade
       this.tweens.add({
@@ -480,7 +489,7 @@ export default class GameScene extends Phaser.Scene {
     const background = this.comboContainer.getAt(0) as Phaser.GameObjects.Arc
     background.setFillStyle(backgroundColor, 0.8)
 
-    // Show and pulse animation - hold for longer visibility
+    // Show and pulse animation - then fade out
     this.tweens.add({
       targets: this.comboContainer,
       alpha: 1,
@@ -489,7 +498,18 @@ export default class GameScene extends Phaser.Scene {
       yoyo: true,
       ease: 'Back.easeOut',
       hold: this.duration(800), // Hold at peak scale for better visibility
-      repeat: 0
+      repeat: 0,
+      onComplete: () => {
+        // Fade out after the pulse animation completes
+        this.tweens.add({
+          targets: this.comboContainer,
+          alpha: 0,
+          scale: 1,
+          duration: this.duration(400),
+          delay: this.duration(200), // Small delay before fade out
+          ease: 'Power2'
+        })
+      }
     })
 
     // Create particle burst effect
@@ -500,8 +520,8 @@ export default class GameScene extends Phaser.Scene {
     const x = BOARD_SIZE / 2
     const y = 80
 
-    // Particle count and color based on combo level
-    let particleCount = Math.min(combo * 5, 30)
+    // Reduced particle count for less visual clutter
+    let particleCount = Math.min(combo * 3, 15)
     let tintColor = 0x00ff00 // Green
 
     if (combo >= 5) {
@@ -513,10 +533,10 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const particles = this.add.particles(x, y, 'particle', {
-      speed: { min: 100, max: 200 },
-      scale: { start: 0.6, end: 0 },
-      alpha: { start: 1, end: 0 },
-      lifespan: 600,
+      speed: { min: 150, max: 250 }, // Faster so they move away from combo text quickly
+      scale: { start: 0.4, end: 0 }, // Smaller particles
+      alpha: { start: 0.8, end: 0 }, // Start slightly transparent
+      lifespan: 400, // Shorter lifespan
       quantity: particleCount,
       tint: tintColor,
       blendMode: 'ADD',
@@ -524,7 +544,7 @@ export default class GameScene extends Phaser.Scene {
     })
 
     // Auto-destroy particles after they're done
-    this.time.delayedCall(700, () => particles.destroy())
+    this.time.delayedCall(500, () => particles.destroy())
   }
 
   resetCombo () {
@@ -808,6 +828,50 @@ export default class GameScene extends Phaser.Scene {
 
     const pointedCell = this.getCellAt(pointer)
 
+    // Handle shift+click for bug reporting (capture move)
+    if (pointer.event.shiftKey && pointedCell && !pointedCell.empty) {
+      if (!this.bugReportFirstCell) {
+        // First shift+click - select this cell
+        this.bugReportFirstCell = pointedCell
+        console.log(`[BUG REPORT] First cell selected: [${pointedCell.row}, ${pointedCell.column}]`)
+        console.log('[BUG REPORT] Shift+click on second cell to capture move')
+
+        // Add visual feedback
+        pointedCell.sprite.setTint(0xffff00) // Yellow tint
+        pointedCell.sprite.setScale(1.1)
+      } else {
+        // Second shift+click - capture the move
+        const firstCell = this.bugReportFirstCell
+        const secondCell = pointedCell
+
+        // Clear visual feedback
+        firstCell.sprite.clearTint()
+        firstCell.sprite.setScale(1)
+
+        // Reset tracking
+        this.bugReportFirstCell = null
+
+        // Prompt for expected behavior
+        const description = window.prompt('Describe the expected behavior:')
+
+        if (description) {
+          console.log(`[BUG REPORT] Capturing move from [${firstCell.row}, ${firstCell.column}] to [${secondCell.row}, ${secondCell.column}]`)
+          this.captureMove(firstCell.row, firstCell.column, secondCell.row, secondCell.column, description)
+        } else {
+          console.log('[BUG REPORT] Cancelled - no description provided')
+        }
+      }
+      return
+    }
+
+    // If clicking normally but had a bug report cell selected, clear it
+    if (this.bugReportFirstCell && !pointer.event.shiftKey) {
+      this.bugReportFirstCell.sprite.clearTint()
+      this.bugReportFirstCell.sprite.setScale(1)
+      this.bugReportFirstCell = null
+      console.log('[BUG REPORT] Selection cleared')
+    }
+
     // Handle hammer mode - click to destroy a gem
     if (this.hammerModeActive) {
       if (!pointedCell || pointedCell.empty) {
@@ -948,14 +1012,56 @@ export default class GameScene extends Phaser.Scene {
     // STEP 3: Now trigger the swapped power-up (if any)
     if (hasPowerUp) {
       this.debugLog('→ Triggering swapped power-up...')
-      if (firstCell.powerup) {
-        this.debugLog(`  Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
-        this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
+
+      // Check for power-up combos first
+      const p1 = firstCell.powerup
+      const p2 = secondCell.powerup
+
+      // Light Ball + Light Ball = Board clear
+      if (p1 === 'light-ball' && p2 === 'light-ball') {
+        await this.triggerLightBallLightBallCombo(firstCell, secondCell)
       }
-      if (secondCell.powerup) {
-        this.debugLog(`  Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
-        this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
+      // Light Ball + TNT = Mega explosion
+      else if ((p1 === 'light-ball' && p2 === 'tnt') || (p1 === 'tnt' && p2 === 'light-ball')) {
+        await this.triggerLightBallTNTCombo(firstCell, secondCell)
       }
+      // Light Ball + Rocket = Color clear + line clear
+      else if ((p1 === 'light-ball' && (p2 === 'horizontal-rocket' || p2 === 'vertical-rocket')) ||
+               ((p1 === 'horizontal-rocket' || p1 === 'vertical-rocket') && p2 === 'light-ball')) {
+        const lightBall = p1 === 'light-ball' ? firstCell : secondCell
+        const rocket = p1 === 'light-ball' ? secondCell : firstCell
+        await this.triggerLightBallRocketCombo(lightBall, rocket)
+      }
+      // Fly-Away + Light Ball = Multi-target strike
+      else if ((p1 === 'fly-away' && p2 === 'light-ball') || (p1 === 'light-ball' && p2 === 'fly-away')) {
+        const flyAway = p1 === 'fly-away' ? firstCell : secondCell
+        const lightBall = p1 === 'fly-away' ? secondCell : firstCell
+        await this.triggerFlyAwayLightBallCombo(flyAway, lightBall)
+      }
+      // Two Fly-Aways = Create 3 Fly-Aways
+      else if (p1 === 'fly-away' && p2 === 'fly-away') {
+        await this.triggerFlyAwayFlyAwayCombo(firstCell, secondCell)
+      }
+      // Two vertical rockets
+      else if (p1 === 'vertical-rocket' && p2 === 'vertical-rocket') {
+        await this.triggerVerticalRocketCombo(firstCell, secondCell)
+      }
+      // Two horizontal rockets
+      else if (p1 === 'horizontal-rocket' && p2 === 'horizontal-rocket') {
+        await this.triggerHorizontalRocketCombo(firstCell, secondCell)
+      }
+      else {
+        // No combo - trigger power-ups individually
+        if (firstCell.powerup) {
+          this.debugLog(`  Activating ${firstCell.powerup} at [${firstCell.row}, ${firstCell.column}]`)
+          this.triggerPowerUp(firstCell, secondCell)  // Pass the gem it was swapped with
+        }
+        if (secondCell.powerup) {
+          this.debugLog(`  Activating ${secondCell.powerup} at [${secondCell.row}, ${secondCell.column}]`)
+          this.triggerPowerUp(secondCell, firstCell)  // Pass the gem it was swapped with
+        }
+      }
+
       await this.destroyCells()
       await this.makeCellsFall()
       await this.refillBoard()
@@ -1499,6 +1605,20 @@ export default class GameScene extends Phaser.Scene {
                 horizontalChallengeCount++
               }
               this.markCellForDestructionImmediate(targetCell)
+
+              // Create particle effect for this cell
+              const particleX = targetCell.column * CELL_SIZE + CELL_SIZE / 2
+              const particleY = targetCell.row * CELL_SIZE + CELL_SIZE / 2
+              const particles = this.add.particles(particleX, particleY, 'particle', {
+                speed: { min: 50, max: 100 },
+                scale: { start: 0.4, end: 0 },
+                alpha: { start: 1, end: 0 },
+                lifespan: 300,
+                quantity: 5,
+                tint: 0xff6600,
+                blendMode: 'ADD'
+              })
+              this.time.delayedCall(400, () => particles.destroy())
             }
           }
 
@@ -1556,6 +1676,20 @@ export default class GameScene extends Phaser.Scene {
                 verticalChallengeCount++
               }
               this.markCellForDestructionImmediate(targetCell)
+
+              // Create particle effect for this cell
+              const particleX = targetCell.column * CELL_SIZE + CELL_SIZE / 2
+              const particleY = targetCell.row * CELL_SIZE + CELL_SIZE / 2
+              const particles = this.add.particles(particleX, particleY, 'particle', {
+                speed: { min: 50, max: 100 },
+                scale: { start: 0.4, end: 0 },
+                alpha: { start: 1, end: 0 },
+                lifespan: 300,
+                quantity: 5,
+                tint: 0xff6600,
+                blendMode: 'ADD'
+              })
+              this.time.delayedCall(400, () => particles.destroy())
             }
           }
 
@@ -2267,35 +2401,11 @@ export default class GameScene extends Phaser.Scene {
 
   createPowerUpEffect (x: number, y: number, powerUpType: PowerUpType, cell: Cell) {
     if (powerUpType === 'horizontal-rocket') {
-      // Create horizontal laser effect
-      for (let col = 0; col < size; col++) {
-        const particleX = col * CELL_SIZE + CELL_SIZE / 2
-        const particles = this.add.particles(particleX, y, 'particle', {
-          speed: { min: 50, max: 100 },
-          scale: { start: 0.4, end: 0 },
-          alpha: { start: 1, end: 0 },
-          lifespan: 300,
-          quantity: 5,
-          tint: 0xff6600,
-          blendMode: 'ADD'
-        })
-        this.time.delayedCall(400, () => particles.destroy())
-      }
+      // Particle effects are now created inline during destruction waves
+      // (See horizontal-rocket case in triggerPowerUp)
     } else if (powerUpType === 'vertical-rocket') {
-      // Create vertical laser effect
-      for (let row = 0; row < size; row++) {
-        const particleY = row * CELL_SIZE + CELL_SIZE / 2
-        const particles = this.add.particles(x, particleY, 'particle', {
-          speed: { min: 50, max: 100 },
-          scale: { start: 0.4, end: 0 },
-          alpha: { start: 1, end: 0 },
-          lifespan: 300,
-          quantity: 5,
-          tint: 0xff6600,
-          blendMode: 'ADD'
-        })
-        this.time.delayedCall(400, () => particles.destroy())
-      }
+      // Particle effects are now created inline during destruction waves
+      // (See vertical-rocket case in triggerPowerUp)
     } else if (powerUpType === 'light-ball') {
       // Create massive rainbow explosion
       const particles = this.add.particles(x, y, 'particle', {
@@ -3306,6 +3416,98 @@ export default class GameScene extends Phaser.Scene {
       console.log(`[DEBUG] Loaded ${name} with 2 horizontal rockets at [4,3] and [4,4]`)
       console.log('[DEBUG] Drag one horizontal rocket onto the other to test the combo')
       console.log('[DEBUG] Expected: One clears row 4, the other clears column where dropped')
+      return
+    }
+
+    if (name === 'rocket-match-order') {
+      // Test board for verifying power-up creation order when swapping a rocket into a match
+      // The rocket swap should CREATE the new power-up from the match BEFORE triggering the rocket
+      const rocketMatchOrderBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'green', 'blue', 'green', 'red', 'blue', 'red', 'green'],
+        ['yellow', 'pink', 'blue', 'green', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'green', 'red', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = rocketMatchOrderBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn a vertical rocket at [2, 2]
+      this.spawnPowerup('vertical-rocket', 2, 2)
+
+      console.log(`[DEBUG] Loaded ${name}`)
+      console.log('[DEBUG] Vertical rocket at [2,2]. Green gems form a 2x2 at rows 2-3, cols 3-4')
+      console.log('[DEBUG] Swap rocket at [2,2] with green at [2,3]')
+      console.log('[DEBUG] Expected: Creates fly-away from 2x2 match BEFORE triggering rocket')
+      console.log('[DEBUG] The fly-away should be created at the swap position, then rocket clears column')
+      return
+    }
+
+    if (name === 'light-ball-combo') {
+      // Load a simple test board for light-ball + light-ball combo testing
+      const lightBallComboBoard = [
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green'],
+        ['green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow'],
+        ['yellow', 'pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink'],
+        ['pink', 'yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow'],
+        ['yellow', 'blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue'],
+        ['blue', 'red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red'],
+        ['red', 'green', 'yellow', 'pink', 'yellow', 'blue', 'red', 'green']
+      ]
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = lightBallComboBoard[row][col]
+
+          // Destroy existing sprite if it exists
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn two light-balls horizontally adjacent to each other (side by side)
+      this.spawnPowerup('light-ball', 4, 3)
+      this.spawnPowerup('light-ball', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with 2 light-balls at [4,3] and [4,4]`)
+      console.log('[DEBUG] Swap the two light-balls to test the board clear combo')
+      console.log('[DEBUG] Expected: Entire board cleared with rainbow explosion')
       return
     }
 
