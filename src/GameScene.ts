@@ -11,6 +11,7 @@ import { ScoreStorageService } from './ScoreStorageService'
 import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
 import { MatchDetector } from './game/MatchDetector'
 import { PowerUpSystem } from './game/PowerUpSystem'
+import { BoardState, type BoardConfig } from './game/BoardState'
 import { type Cell, type PowerUpType, type Position } from './types'
 import { GEM_DEFINITIONS, getGemSprite, getAllGemIds } from './GemConfig'
 
@@ -24,9 +25,18 @@ const swapDuration = 540 // ms (3x slower)
 const destroyDuration = 540 // ms (3x slower)
 
 export default class GameScene extends Phaser.Scene {
-  board: Cell[][]
+  boardState: BoardState
   initialBoardState: Array<{row: number, column: number, color: string}> | null
   selectedCell: Cell
+
+  // Backward-compatible getters
+  get board(): Cell[][] {
+    return this.boardState?.getRawBoard() || []
+  }
+
+  get size(): number {
+    return this.boardState?.getWidth() || size
+  }
   draggedCell: Cell | null
   dragStartX: number
   dragStartY: number
@@ -294,7 +304,13 @@ export default class GameScene extends Phaser.Scene {
   }
 
   destroyBoard () {
-    this.board.forEach(row => row.forEach(cell => cell.sprite.destroy()))
+    if (this.boardState) {
+      this.boardState.getAllCells().forEach(cell => {
+        if (cell.sprite) {
+          cell.sprite.destroy()
+        }
+      })
+    }
   }
 
   createBackground () {
@@ -358,8 +374,13 @@ export default class GameScene extends Phaser.Scene {
   }
 
   initBoard () {
-    // Create empty board
-    this.board = createEmptyBoard(size)
+    // Create BoardState with default 8x8 configuration
+    const boardConfig: BoardConfig = {
+      width: size,
+      height: size,
+      shape: 'rectangle'
+    }
+    this.boardState = new BoardState(boardConfig)
 
     // Check if a test board was requested via URL
     if (this.testBoard) {
@@ -369,15 +390,18 @@ export default class GameScene extends Phaser.Scene {
 
     // Fill board using gem types for current level difficulty
     const levelGems = this.levelConfig ? this.levelConfig.gemTypes : gems
-    for (let row = 0; row < size; row++) {
-      for (let column = 0; column < size; column++) {
-        const cell = this.board[row][column]
+    const board = this.boardState.getRawBoard()
+
+    for (let row = 0; row < this.size; row++) {
+      for (let column = 0; column < this.size; column++) {
+        const cell = board[row][column]
+        if (!cell) continue  // Skip null cells (for non-rectangular boards)
 
         const possibleColors = []
         for (let color of levelGems) {
           cell.color = color
           // Check for both 3+ matches AND 2x2 squares
-          if (!MatchDetector.shouldExplode(cell, this.board) && !MatchDetector.wouldCreate2x2Square(cell, this.board)) {
+          if (!MatchDetector.shouldExplode(cell, board) && !MatchDetector.wouldCreate2x2Square(cell, board)) {
             possibleColors.push(color)
           }
         }
@@ -644,10 +668,18 @@ export default class GameScene extends Phaser.Scene {
     this.destroyBoard()
 
     // Recreate board with saved state
-    this.board = createEmptyBoard(size)
+    const boardConfig: BoardConfig = {
+      width: size,
+      height: size,
+      shape: 'rectangle'
+    }
+    this.boardState = new BoardState(boardConfig)
+    const board = this.boardState.getRawBoard()
 
     for (const cellData of this.initialBoardState) {
-      const cell = this.board[cellData.row][cellData.column]
+      const cell = board[cellData.row][cellData.column]
+      if (!cell) continue
+
       cell.color = cellData.color
       cell.empty = false
       cell.powerup = null
@@ -1157,11 +1189,17 @@ export default class GameScene extends Phaser.Scene {
 
   getBoardHash (): string {
     // Create a compact hash of the board state for caching
+    if (!this.boardState) {
+      return ''
+    }
+
     let hash = ''
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        const cell = this.board[row][col]
-        if (cell.empty) {
+    for (let row = 0; row < this.size; row++) {
+      for (let col = 0; col < this.size; col++) {
+        const cell = this.boardState.getCell(row, col)
+        if (!cell) {
+          hash += 'X'  // Missing cell
+        } else if (cell.empty) {
           hash += 'E'
         } else if (cell.powerup) {
           hash += cell.powerup[0].toUpperCase()
