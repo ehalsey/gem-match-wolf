@@ -145,7 +145,8 @@ test.describe('Rocket + Fly-Away Combo', () => {
     expect(result.row2EmptyCount).toBe(8)
   })
 
-  test('visual inspection - see what actually happens', async ({ page }) => {
+  // SKIPPED: Manual visual inspection test - requires human interaction
+  test.skip('visual inspection - see what actually happens', async ({ page }) => {
     await page.goto('http://localhost:8000/?debug=true&board=rocket-flyaway-combo', { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(2000)
 
