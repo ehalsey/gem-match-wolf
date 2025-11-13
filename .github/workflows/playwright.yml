@@ -37,8 +37,8 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Run Playwright tests
-        # run with HTML reporter and retry failed tests twice for CI robustness
-        run: npx playwright test --reporter=html --retries=2
+        # CI env var enables special config: github reporter, 10min global timeout
+        run: npx playwright test
 
       - name: Upload Playwright HTML report
         if: always()
