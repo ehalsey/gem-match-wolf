@@ -2,6 +2,8 @@
 
 This guide explains how to test different game scenarios and report bugs efficiently.
 
+> **📝 For Automated Testing**: See [docs/TEST_APPROACH.md](docs/TEST_APPROACH.md) for patterns and best practices for writing Playwright tests for this Phaser-based game.
+
 ## Quick Reference
 
 **Enable Debug Mode**: `http://localhost:8000/?debug=true`

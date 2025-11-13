@@ -158,7 +158,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - ?debug=true - Enable debug mode')
       console.log('  - ?board=match4h - Load test board')
       console.log('  - ?seed=12345 - Set random seed')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, rocket-match-order, light-ball-combo, hammer-test, level5-snapshot')
+      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, rocket-flyaway-combo, rocket-flyaway-combo-vertical, rocket-match-order, light-ball-combo, hammer-test, level5-snapshot')
     }
 
     this.createBackground()
@@ -1075,6 +1075,13 @@ export default class GameScene extends Phaser.Scene {
       // Two Fly-Aways = Create 3 Fly-Aways
       else if (p1 === 'fly-away' && p2 === 'fly-away') {
         await this.triggerFlyAwayFlyAwayCombo(firstCell, secondCell)
+      }
+      // Rocket + Fly-Away = Smart row/column destruction
+      else if ((p1 === 'fly-away' && (p2 === 'horizontal-rocket' || p2 === 'vertical-rocket')) ||
+               ((p1 === 'horizontal-rocket' || p1 === 'vertical-rocket') && p2 === 'fly-away')) {
+        const flyAway = p1 === 'fly-away' ? firstCell : secondCell
+        const rocket = p1 === 'fly-away' ? secondCell : firstCell
+        await this.triggerRocketFlyAwayCombo(rocket, flyAway)
       }
       // Two vertical rockets
       else if (p1 === 'vertical-rocket' && p2 === 'vertical-rocket') {
@@ -2298,6 +2305,349 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  async triggerRocketFlyAwayCombo (rocketCell: Cell, flyAwayCell: Cell): Promise<void> {
+    const rocketType = rocketCell.powerup
+    console.log(`🚀🚁 ROCKET + FLY-AWAY COMBO! Fly-away will find best ${rocketType === 'horizontal-rocket' ? 'ROW' : 'COLUMN'}`)
+
+    // Play sounds
+    this.sound.play('rocket', { volume: 0.5 })
+
+    // Determine rocket direction
+    const isHorizontal = rocketType === 'horizontal-rocket'
+
+    // Clear both powerup properties
+    rocketCell.powerup = null
+    flyAwayCell.powerup = null
+
+    // Mark both cells for destruction
+    this.markCellForDestructionImmediate(rocketCell)
+    this.markCellForDestructionImmediate(flyAwayCell)
+
+    // Analyze challenge to find best row/column
+    const targetPosition = isHorizontal
+      ? this.findBestRowForRocket()
+      : this.findBestColumnForRocket()
+
+    console.log(`[ROCKET + FLY-AWAY] Best ${isHorizontal ? 'row' : 'column'} is ${targetPosition} based on challenge analysis`)
+
+    // Find a cell in that row/column to fly to
+    const targetCell = isHorizontal
+      ? this.board[targetPosition][Math.floor(size / 2)] // Middle of the row
+      : this.board[Math.floor(size / 2)][targetPosition] // Middle of the column
+
+    // Animate fly away to target in an arc
+    await this.animateFlyAwayArc(flyAwayCell, targetCell)
+
+    // Now trigger rocket explosion at that position with wave animation
+    console.log(`[ROCKET + FLY-AWAY] Triggering ${rocketType} explosion at [${targetCell.row}, ${targetCell.column}]`)
+
+    // Trigger rocket explosion with the proper wave animation
+    if (isHorizontal) {
+      await this.triggerHorizontalRocketExplosion(targetCell)
+    } else {
+      await this.triggerVerticalRocketExplosion(targetCell)
+    }
+  }
+
+  async triggerHorizontalRocketExplosion (cell: Cell): Promise<void> {
+    // Destroy row in waves radiating outward from source
+    let horizontalChallengeCount = 0
+    const maxDistanceLeft = cell.column
+    const maxDistanceRight = size - 1 - cell.column
+    const maxHorizontalDistance = Math.max(maxDistanceLeft, maxDistanceRight)
+
+    // Process each distance level sequentially
+    for (let distance = 0; distance <= maxHorizontalDistance; distance++) {
+      const cellsAtDistance: Cell[] = []
+
+      // Add cells at this distance (left and/or right)
+      if (distance === 0) {
+        // Center cell (the target position)
+        cellsAtDistance.push(cell)
+      } else {
+        // Left cell
+        const leftCol = cell.column - distance
+        if (leftCol >= 0) {
+          cellsAtDistance.push(this.board[cell.row][leftCol])
+        }
+        // Right cell
+        const rightCol = cell.column + distance
+        if (rightCol < size) {
+          cellsAtDistance.push(this.board[cell.row][rightCol])
+        }
+      }
+
+      // Process all cells at this distance
+      for (const targetCell of cellsAtDistance) {
+        if (targetCell.powerup) {
+          console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+          await this.triggerPowerUp(targetCell)
+        } else {
+          if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+            horizontalChallengeCount++
+          }
+          this.markCellForDestructionImmediate(targetCell)
+
+          // Create particle effect for this cell
+          const particleX = targetCell.column * CELL_SIZE + CELL_SIZE / 2
+          const particleY = targetCell.row * CELL_SIZE + CELL_SIZE / 2
+          const particles = this.add.particles(particleX, particleY, 'particle', {
+            speed: { min: 50, max: 100 },
+            scale: { start: 0.4, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 300,
+            quantity: 5,
+            tint: 0xff6600,
+            blendMode: 'ADD'
+          })
+          this.time.delayedCall(400, () => particles.destroy())
+        }
+      }
+
+      // Add delay between distance levels (except after the last one)
+      if (distance < maxHorizontalDistance) {
+        await new Promise<void>(resolve => {
+          this.time.delayedCall(this.duration(80), () => resolve())
+        })
+      }
+    }
+
+    // Update challenge progress
+    if (horizontalChallengeCount > 0 && this.currentChallenge) {
+      console.log(`[CHALLENGE] Horizontal rocket destroyed ${horizontalChallengeCount} ${this.currentChallenge.color} gems`)
+      this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, horizontalChallengeCount)
+      this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+    }
+  }
+
+  async triggerVerticalRocketExplosion (cell: Cell): Promise<void> {
+    // Destroy column in waves radiating outward from source
+    let verticalChallengeCount = 0
+    const maxDistanceUp = cell.row
+    const maxDistanceDown = size - 1 - cell.row
+    const maxVerticalDistance = Math.max(maxDistanceUp, maxDistanceDown)
+
+    // Process each distance level sequentially
+    for (let distance = 0; distance <= maxVerticalDistance; distance++) {
+      const cellsAtDistance: Cell[] = []
+
+      // Add cells at this distance (up and/or down)
+      if (distance === 0) {
+        // Center cell (the target position)
+        cellsAtDistance.push(cell)
+      } else {
+        // Up cell
+        const upRow = cell.row - distance
+        if (upRow >= 0) {
+          cellsAtDistance.push(this.board[upRow][cell.column])
+        }
+        // Down cell
+        const downRow = cell.row + distance
+        if (downRow < size) {
+          cellsAtDistance.push(this.board[downRow][cell.column])
+        }
+      }
+
+      // Process all cells at this distance
+      for (const targetCell of cellsAtDistance) {
+        if (targetCell.powerup) {
+          console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
+          await this.triggerPowerUp(targetCell)
+        } else {
+          if (this.currentChallenge && this.currentChallenge.type === 'color-match' && targetCell.color === this.currentChallenge.color) {
+            verticalChallengeCount++
+          }
+          this.markCellForDestructionImmediate(targetCell)
+
+          // Create particle effect for this cell
+          const particleX = targetCell.column * CELL_SIZE + CELL_SIZE / 2
+          const particleY = targetCell.row * CELL_SIZE + CELL_SIZE / 2
+          const particles = this.add.particles(particleX, particleY, 'particle', {
+            speed: { min: 50, max: 100 },
+            scale: { start: 0.4, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 300,
+            quantity: 5,
+            tint: 0xff6600,
+            blendMode: 'ADD'
+          })
+          this.time.delayedCall(400, () => particles.destroy())
+        }
+      }
+
+      // Add delay between distance levels (except after the last one)
+      if (distance < maxVerticalDistance) {
+        await new Promise<void>(resolve => {
+          this.time.delayedCall(this.duration(80), () => resolve())
+        })
+      }
+    }
+
+    // Update challenge progress
+    if (verticalChallengeCount > 0 && this.currentChallenge) {
+      console.log(`[CHALLENGE] Vertical rocket destroyed ${verticalChallengeCount} ${this.currentChallenge.color} gems`)
+      this.currentChallenge = LevelSystem.updateChallengeProgress(this.currentChallenge, verticalChallengeCount)
+      this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
+    }
+  }
+
+  findBestRowForRocket (): number {
+    // Analyze the board to find the best row based on current challenge
+    if (!this.currentChallenge) {
+      // No challenge - just pick middle row
+      return Math.floor(size / 2)
+    }
+
+    if (this.currentChallenge.type === 'color-match') {
+      // Find row with most gems of the challenge color
+      const targetColor = this.currentChallenge.color
+      let bestRow = 0
+      let maxCount = 0
+
+      for (let row = 0; row < size; row++) {
+        let count = 0
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          if (!cell.empty && cell.color === targetColor) {
+            count++
+          }
+        }
+        if (count > maxCount) {
+          maxCount = count
+          bestRow = row
+        }
+      }
+
+      console.log(`[CHALLENGE ANALYSIS] Best row for color-match (${targetColor}): row ${bestRow} with ${maxCount} gems`)
+      return bestRow
+    } else if (this.currentChallenge.type === 'power-up-create') {
+      // Find row with most potential for creating power-ups (most same-colored neighbors)
+      let bestRow = 0
+      let maxPotential = 0
+
+      for (let row = 0; row < size; row++) {
+        let potential = 0
+        // Count adjacent same-color pairs in this row
+        for (let col = 0; col < size - 1; col++) {
+          const cell = this.board[row][col]
+          const next = this.board[row][col + 1]
+          if (!cell.empty && !next.empty && cell.color === next.color) {
+            potential++
+          }
+        }
+        if (potential > maxPotential) {
+          maxPotential = potential
+          bestRow = row
+        }
+      }
+
+      console.log(`[CHALLENGE ANALYSIS] Best row for power-up creation: row ${bestRow} with potential ${maxPotential}`)
+      return bestRow
+    }
+
+    // Default to middle row
+    return Math.floor(size / 2)
+  }
+
+  findBestColumnForRocket (): number {
+    // Analyze the board to find the best column based on current challenge
+    if (!this.currentChallenge) {
+      // No challenge - just pick middle column
+      return Math.floor(size / 2)
+    }
+
+    if (this.currentChallenge.type === 'color-match') {
+      // Find column with most gems of the challenge color
+      const targetColor = this.currentChallenge.color
+      let bestCol = 0
+      let maxCount = 0
+
+      for (let col = 0; col < size; col++) {
+        let count = 0
+        for (let row = 0; row < size; row++) {
+          const cell = this.board[row][col]
+          if (!cell.empty && cell.color === targetColor) {
+            count++
+          }
+        }
+        if (count > maxCount) {
+          maxCount = count
+          bestCol = col
+        }
+      }
+
+      console.log(`[CHALLENGE ANALYSIS] Best column for color-match (${targetColor}): col ${bestCol} with ${maxCount} gems`)
+      return bestCol
+    } else if (this.currentChallenge.type === 'power-up-create') {
+      // Find column with most potential for creating power-ups (most same-colored neighbors)
+      let bestCol = 0
+      let maxPotential = 0
+
+      for (let col = 0; col < size; col++) {
+        let potential = 0
+        // Count adjacent same-color pairs in this column
+        for (let row = 0; row < size - 1; row++) {
+          const cell = this.board[row][col]
+          const next = this.board[row + 1][col]
+          if (!cell.empty && !next.empty && cell.color === next.color) {
+            potential++
+          }
+        }
+        if (potential > maxPotential) {
+          maxPotential = potential
+          bestCol = col
+        }
+      }
+
+      console.log(`[CHALLENGE ANALYSIS] Best column for power-up creation: col ${bestCol} with potential ${maxPotential}`)
+      return bestCol
+    }
+
+    // Default to middle column
+    return Math.floor(size / 2)
+  }
+
+  animateFlyAwayArc (fromCell: Cell, toCell: Cell): Promise<void> {
+    return new Promise((resolve) => {
+      const startX = fromCell.column * CELL_SIZE + CELL_SIZE / 2
+      const startY = fromCell.row * CELL_SIZE + CELL_SIZE / 2
+      const endX = toCell.column * CELL_SIZE + CELL_SIZE / 2
+      const endY = toCell.row * CELL_SIZE + CELL_SIZE / 2
+
+      // Create a temporary sprite for the flying animation
+      const flyingSprite = this.add.sprite(startX, startY, 'fly-away')
+        .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+        .setDepth(2000)
+
+      // Calculate arc height (20% of distance)
+      const distance = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2)
+      const arcHeight = distance * 0.3
+
+      // Calculate midpoint for the arc
+      const midX = (startX + endX) / 2
+      const midY = (startY + endY) / 2 - arcHeight
+
+      // Animate along an arc path using a bezier curve
+      this.tweens.add({
+        targets: { t: 0 },
+        t: 1,
+        duration: 800,
+        ease: 'Cubic.easeInOut',
+        onUpdate: (tween) => {
+          const t = tween.getValue()
+          // Quadratic bezier curve: (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+          const x = (1 - t) * (1 - t) * startX + 2 * (1 - t) * t * midX + t * t * endX
+          const y = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * midY + t * t * endY
+          flyingSprite.setPosition(x, y)
+        },
+        onComplete: () => {
+          flyingSprite.destroy()
+          resolve()
+        }
+      })
+    })
+  }
+
   findBestFlyAwayTarget (fromCell: Cell, targetedCells?: Set<Cell>): Cell | null {
     // Find the cell with the most matches (best strategic value)
     // Exclude cells that are already targeted by other fly-aways
@@ -2337,33 +2687,28 @@ export default class GameScene extends Phaser.Scene {
         .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
         .setDepth(2000)
 
-      // Calculate orbit radius for spinning around target
-      const orbitRadius = CELL_SIZE * 0.7
+      // Calculate arc height (30% of distance)
+      const distance = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2)
+      const arcHeight = distance * 0.3
 
-      // Step 1: Fly to target while spinning
+      // Calculate midpoint for the arc
+      const midX = (startX + endX) / 2
+      const midY = (startY + endY) / 2 - arcHeight
+
+      // Animate along an arc path using a bezier curve
       this.tweens.add({
-        targets: flyingSprite,
-        x: endX,
-        y: endY,
-        angle: 360,
-        duration: 1200,
+        targets: { t: 0 },
+        t: 1,
+        duration: 1000,
         ease: 'Cubic.easeInOut',
-        onComplete: () => {
-          // Step 2: Orbit around target once
-          let orbitAngle = 0
-          this.tweens.add({
-            targets: { progress: 0 },
-            progress: 1,
-            duration: 800,
-            ease: 'Linear',
-            onUpdate: (tween) => {
-              const progress = tween.progress
-              orbitAngle = progress * Math.PI * 2
-              flyingSprite.x = endX + Math.cos(orbitAngle) * orbitRadius
-              flyingSprite.y = endY + Math.sin(orbitAngle) * orbitRadius
-              flyingSprite.angle = 360 + (progress * 360)
-            },
-            onComplete: async () => {
+        onUpdate: (tween) => {
+          const t = tween.getValue()
+          // Quadratic bezier curve: (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+          const x = (1 - t) * (1 - t) * startX + 2 * (1 - t) * t * midX + t * t * endX
+          const y = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * midY + t * t * endY
+          flyingSprite.setPosition(x, y)
+        },
+        onComplete: async () => {
               // Create explosion effect at target
               this.createPowerUpEffect(endX, endY, 'fly-away', toCell)
 
@@ -2432,8 +2777,6 @@ export default class GameScene extends Phaser.Scene {
 
               // Resolve the main promise when everything is complete
               resolve()
-            }
-          })
         }
       })
     })
@@ -2978,6 +3321,8 @@ export default class GameScene extends Phaser.Scene {
           const p1 = firstCell.powerup
           const p2 = secondCell.powerup
 
+          console.log(`[COMBO CHECK] p1=${p1} at [${firstCell.row},${firstCell.column}], p2=${p2} at [${secondCell.row},${secondCell.column}]`)
+
           // Light Ball + Light Ball = Board clear
           if (p1 === 'light-ball' && p2 === 'light-ball') {
             await this.triggerLightBallLightBallCombo(firstCell, secondCell)
@@ -3002,6 +3347,16 @@ export default class GameScene extends Phaser.Scene {
           // Two Fly-Aways = Create 3 Fly-Aways
           else if (p1 === 'fly-away' && p2 === 'fly-away') {
             await this.triggerFlyAwayFlyAwayCombo(firstCell, secondCell)
+          }
+          // Rocket + Fly-Away = Smart row/column destruction
+          else if ((p1 === 'fly-away' && (p2 === 'horizontal-rocket' || p2 === 'vertical-rocket')) ||
+                   ((p1 === 'horizontal-rocket' || p1 === 'vertical-rocket') && p2 === 'fly-away')) {
+            console.log('🚀🚁 ROCKET + FLY-AWAY COMBO DETECTED IN DRAG HANDLER!')
+            console.log(`  p1: ${p1}, p2: ${p2}`)
+            const flyAway = p1 === 'fly-away' ? firstCell : secondCell
+            const rocket = p1 === 'fly-away' ? secondCell : firstCell
+            console.log(`  Rocket at [${rocket.row}, ${rocket.column}], Fly-away at [${flyAway.row}, ${flyAway.column}]`)
+            await this.triggerRocketFlyAwayCombo(rocket, flyAway)
           }
           // Two vertical rockets
           else if (p1 === 'vertical-rocket' && p2 === 'vertical-rocket') {
@@ -3641,6 +3996,99 @@ export default class GameScene extends Phaser.Scene {
       console.log(`[DEBUG] Loaded ${name} with 3 hammers`)
       console.log('[DEBUG] This board has no easy matches - use the hammer to break the deadlock')
       console.log('[DEBUG] Click the hammer icon in the menu, then click any gem to destroy it')
+      return
+    }
+
+    if (name === 'rocket-flyaway-combo') {
+      // Load a test board for rocket + fly-away combo testing
+      // Row 2 has lots of blue gems (best for horizontal rocket)
+      // Column 5 has lots of pink gems (best for vertical rocket)
+      const rocketFlyawayBoard = [
+        ['red', 'green', 'yellow', 'red', 'green', 'pink', 'blue', 'red'],
+        ['green', 'yellow', 'red', 'green', 'yellow', 'pink', 'red', 'green'],
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'pink', 'blue', 'blue'],  // Row 2: lots of blue
+        ['yellow', 'red', 'green', 'yellow', 'red', 'pink', 'yellow', 'red'],
+        ['red', 'green', 'yellow', 'red', 'green', 'pink', 'red', 'green'],
+        ['green', 'yellow', 'red', 'green', 'yellow', 'pink', 'green', 'yellow'],
+        ['yellow', 'red', 'green', 'yellow', 'red', 'pink', 'yellow', 'red'],
+        ['red', 'green', 'yellow', 'red', 'green', 'pink', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = rocketFlyawayBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn horizontal rocket and fly-away next to each other
+      this.spawnPowerup('horizontal-rocket', 4, 3)
+      this.spawnPowerup('fly-away', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with horizontal rocket at [4,3] and fly-away at [4,4]`)
+      console.log('[DEBUG] Drag horizontal rocket onto fly-away to test combo')
+      console.log('[DEBUG] Expected: Fly-away should fly to row 2 (most blue gems) and trigger rocket there')
+      console.log('[DEBUG] NOTE: Set challenge to color-match blue for best results')
+      return
+    }
+
+    if (name === 'rocket-flyaway-combo-vertical') {
+      // Load a test board for vertical rocket + fly-away combo testing
+      // Column 5 has lots of pink gems (best for vertical rocket)
+      const rocketFlyawayVerticalBoard = [
+        ['red', 'green', 'yellow', 'red', 'green', 'pink', 'blue', 'red'],
+        ['green', 'yellow', 'red', 'green', 'yellow', 'pink', 'red', 'green'],
+        ['blue', 'blue', 'blue', 'blue', 'blue', 'pink', 'blue', 'blue'],
+        ['yellow', 'red', 'green', 'yellow', 'red', 'pink', 'yellow', 'red'],
+        ['red', 'green', 'yellow', 'red', 'green', 'pink', 'red', 'green'],
+        ['green', 'yellow', 'red', 'green', 'yellow', 'pink', 'green', 'yellow'],
+        ['yellow', 'red', 'green', 'yellow', 'red', 'pink', 'yellow', 'red'],
+        ['red', 'green', 'yellow', 'red', 'green', 'pink', 'red', 'green']
+      ]
+
+      // Load the board
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const cell = this.board[row][col]
+          const newColor = rocketFlyawayVerticalBoard[row][col]
+
+          if (cell.sprite) {
+            cell.sprite.destroy()
+          }
+
+          cell.color = newColor
+          cell.powerup = null
+          cell.empty = false
+
+          const x = col * CELL_SIZE + CELL_SIZE / 2
+          const y = row * CELL_SIZE + CELL_SIZE / 2
+          cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+            .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+            .setInteractive({ draggable: true })
+        }
+      }
+
+      // Spawn vertical rocket and fly-away next to each other
+      this.spawnPowerup('vertical-rocket', 3, 4)
+      this.spawnPowerup('fly-away', 4, 4)
+      console.log(`[DEBUG] Loaded ${name} with vertical rocket at [3,4] and fly-away at [4,4]`)
+      console.log('[DEBUG] Drag vertical rocket onto fly-away to test combo')
+      console.log('[DEBUG] Expected: Fly-away should fly to column 5 (most pink gems) and trigger rocket there')
+      console.log('[DEBUG] NOTE: Set challenge to color-match pink for best results')
       return
     }
 

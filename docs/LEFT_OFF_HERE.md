@@ -1,7 +1,71 @@
-# Left Off Here - Variable Board Dimensions Bug
+# Left Off Here - Rocket + Fly Away Combo Complete
+
+**Date**: 2025-11-12
+**Branch**: `refactor/variable-boards`
+**Status**: ✅ Rocket + Fly Away combo feature completed and tested
+
+## Latest Completed Feature: Rocket + Fly Away Combo
+
+### What Was Implemented
+Dropping a rocket on a fly away now intelligently selects the best row or column based on the current level goal:
+
+1. **Goal Analysis**: Analyzes current challenge (color-match, power-up-create) to find optimal target
+2. **Smart Selection**:
+   - Horizontal rocket → finds row with most target-color gems or best power-up potential
+   - Vertical rocket → finds column with most target-color gems or best power-up potential
+3. **Arc Animation**: Fly away flies in a smooth arc (no spinning) to the target position
+4. **Rocket Explosion**: Triggers full rocket wave explosion at target, clearing entire row/column
+
+### Files Modified
+- `src/GameScene.ts` lines 1079-1085, 2308-2608, 3349-3358
+  - Added combo detection in drag handler
+  - Implemented `triggerRocketFlyAwayCombo()`
+  - Implemented `findBestRowForRocket()` and `findBestColumnForRocket()`
+  - Implemented `animateFlyAwayArc()` for smooth arc motion
+  - Implemented `triggerHorizontalRocketExplosion()` and `triggerVerticalRocketExplosion()`
+- Regular fly away animation also updated to use arc instead of spinning
+
+### Test Boards Created
+- `rocket-flyaway-combo` - Horizontal rocket + fly away (row 2 has lots of blue gems)
+- `rocket-flyaway-combo-vertical` - Vertical rocket + fly away (column 5 has lots of pink gems)
+
+### Tests Created
+- `tests/rocket-flyaway-combo.spec.ts` - Automated test (calls combo directly)
+- `tests/rocket-flyaway-console.spec.ts` - Console logging verification test
+- `tests/rocket-flyaway-screenshot.spec.ts` - Visual verification with screenshots
+
+### Testing Documentation Created
+- **`docs/TEST_APPROACH.md`** - Comprehensive guide for testing Phaser interactions
+- **`CLAUDE.md`** - Quick reference for Claude when working on this codebase
+- Updated `TESTING.md` to reference automated testing docs
+
+### Key Testing Lesson Learned
+**⚠️ Critical**: Playwright's `page.mouse` events do NOT trigger Phaser drag handlers. Instead, call game methods directly via `page.evaluate()`. See [docs/TEST_APPROACH.md](TEST_APPROACH.md) for full details.
+
+### How to Test
+```bash
+# Manual test
+npm start
+# Open http://localhost:8000/?debug=true&board=rocket-flyaway-combo
+# Drag horizontal rocket onto fly away
+
+# Automated test
+npx playwright test tests/rocket-flyaway-console.spec.ts --headed
+```
+
+### Verification
+✅ Combo logic works correctly (verified via direct API calls)
+✅ Goal analysis correctly identifies best row/column
+✅ Arc animation smooth and no spinning
+✅ Rocket explosion clears entire row/column
+✅ Challenge progress tracked correctly
+
+---
+
+# Previous: Variable Board Dimensions Bug
 
 **Date**: 2025-11-11
-**Branch**: `refactor/variable-boards` (or master)
+**Branch**: `refactor/variable-boards`
 **Status**: Bug found and partially fixed, but still not working in browser
 
 ## What We Were Trying To Do
