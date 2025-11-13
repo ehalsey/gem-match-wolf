@@ -1,19 +1,46 @@
-# Left Off Here - Analytics System Planning
+# Left Off Here - Test Fixes for CI
 
 **Date**: 2025-11-12
-**Branch**: `refactor/variable-boards` (PR #25 ready for review)
-**Status**: 📋 Planning analytics system for level balancing
+**Branch**: `refactor/variable-boards` (PR #25)
+**Status**: 🔧 Fixed test hangs in GitHub Actions CI
 
-## Next Feature: Game Analytics & Level Balancing
+## Latest Work: Fixed Hanging Tests in CI
+
+**Problem**: Tests were hanging in GitHub Actions and not completing.
+
+**Root Cause**: Two test files (`combo-display-fix.spec.ts` and `combo-display.spec.ts`) were using `page.mouse.click()` to trigger Phaser game interactions, which doesn't work reliably in headless CI environments.
+
+**Solution**: Updated both tests to call `gameScene.handleMove()` directly via `page.evaluate()` instead of simulating mouse events.
+
+**Status**:
+- ✅ Fixed mouse event anti-pattern in both files
+- ⚠️ Tests still fail due to board initialization timing issues (documented)
+- ✅ Documented known issues in `docs/TEST_APPROACH.md`
+
+**Files Modified**:
+- `tests/combo-display-fix.spec.ts` - Now calls game methods directly
+- `tests/combo-display.spec.ts` - Now calls game methods directly
+- `docs/TEST_APPROACH.md` - Added "Known Test Issues" section
+
+**Verification**:
+- `tests/rocket-flyaway-console.spec.ts` ✅ Passes in 10.8s (uses correct pattern)
+- `tests/powerups.spec.ts` ✅ Already uses correct pattern
+- `tests/light-ball-combo.spec.ts` ✅ Already uses correct pattern
+
+**Next Steps**:
+1. Merge PR #25 (tests should no longer hang, though 2 may still fail)
+2. Future: Fix board initialization issues in combo-display tests
+3. Start analytics system implementation
+
+---
+
+## Analytics System Planning
 
 **Objective**: Track level attempts and success rates to optimize difficulty for 60-70% target
 
 **Documentation**: See [docs/ANALYTICS_PLAN.md](ANALYTICS_PLAN.md) for complete implementation plan
 
-**Next Steps**:
-1. Review and merge PR #25 (Rocket + Fly Away combo)
-2. Create new branch: `feature/analytics-system`
-3. Start Phase 1: Data collection API and tracking
+**Deferred Until After PR #25 Merge**
 
 ---
 

@@ -331,6 +331,32 @@ See `tests/rocket-flyaway-console.spec.ts` for a complete working example that:
 
 See `tests/rocket-flyaway-screenshot.spec.ts` for visual testing with screenshots.
 
+## Known Test Issues
+
+### Tests with Board Initialization Problems
+
+The following tests have been updated to use direct method calls instead of mouse events, but still have board initialization timing issues that need further investigation:
+
+#### `tests/combo-display-fix.spec.ts`
+- **Issue**: Board not initialized when test tries to access cells
+- **Status**: Updated to call `gameScene.handleMove()` directly, but board init fails
+- **Error**: `Error: Board not initialized` or `Cannot read properties of undefined (reading '4')`
+- **Next Steps**: Investigate board initialization timing, possibly needs longer wait or different initialization approach
+
+#### `tests/combo-display.spec.ts`
+- **Issue**: Similar board initialization timing issues
+- **Status**: Updated to call `gameScene.handleMove()` directly
+- **Next Steps**: Same as above
+
+These tests were the cause of hanging in GitHub Actions due to using `page.mouse.click()` events. While that issue has been fixed by switching to direct method calls, the tests still fail due to board initialization problems and need additional work.
+
+**Recommendation**: These tests should be skipped in CI until board initialization issues are resolved:
+```typescript
+test.skip('test name', async ({ page }) => {
+  // Test code
+})
+```
+
 ## Summary
 
 **Key Takeaway**: When testing Phaser game interactions, **bypass the UI layer** and **call game methods directly** through `page.evaluate()`. This gives you reliable, fast tests that accurately verify game logic.

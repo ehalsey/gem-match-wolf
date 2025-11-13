@@ -54,12 +54,18 @@ test.describe('Combo Display System', () => {
     if (moveData) {
       await page.waitForTimeout(300)
 
-      // Click first cell
-      await page.mouse.click(moveData.cell1Pos.x, moveData.cell1Pos.y)
-      await page.waitForTimeout(300)
-
-      // Click second cell
-      await page.mouse.click(moveData.cell2Pos.x, moveData.cell2Pos.y)
+      // Trigger swap directly via game API (not mouse events - they don't work with Phaser)
+      await page.evaluate(async () => {
+        const gameScene = (window as any).game.scene.scenes[1]
+        const moves = gameScene.getWinningMoves()
+        if (moves.length > 0) {
+          const firstMove = moves[0]
+          const maybePromise = gameScene.handleMove(firstMove.cell1, firstMove.cell2)
+          if (maybePromise && typeof maybePromise.then === 'function') {
+            await maybePromise
+          }
+        }
+      })
 
       // Wait for animations and cascades
       await page.waitForTimeout(2000)
