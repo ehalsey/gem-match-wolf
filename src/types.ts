@@ -10,6 +10,16 @@ export interface Cell {
   empty: boolean
   powerup: PowerUpType
   markedForDestruction?: boolean
+
+  // Obstacle system (Phase 2)
+  obstacleState?: {
+    type: string
+    durability: number
+    properties?: {
+      lockedGemColor?: string
+      requiresChain?: number
+    }
+  } | null
 }
 
 export interface Position {

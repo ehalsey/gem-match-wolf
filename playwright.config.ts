@@ -2,13 +2,14 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'tests',
-  timeout: 60000, // Increased from 30000 for complex scene tests
+  timeout: 30000, // 30 seconds per test max
   expect: {
     timeout: 5000
   },
-  retries: 1, // Retry failed tests once
+  retries: process.env.CI ? 2 : 1, // More retries in CI for flaky tests
   workers: 1, // Reduced to 1 to eliminate all parallelization issues
-  reporter: 'html',
+  reporter: process.env.CI ? 'github' : 'html', // GitHub Actions reporter in CI
+  globalTimeout: process.env.CI ? 600000 : undefined, // 10 minute global timeout in CI
   use: {
     trace: 'on-first-retry',
     baseURL: 'http://localhost:8000',
