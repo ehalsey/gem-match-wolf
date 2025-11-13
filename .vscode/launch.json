@@ -50,9 +50,10 @@
         {
             "name": "🚀 Full Stack (Game + API + Azurite)",
             "configurations": [
-                "Launch Game (Chrome)",
-                "Launch Azure Functions + Azurite"
+                "Launch Azure Functions + Azurite",
+                "Launch Game (Chrome)"
             ],
+            "stopAll": true,
             "presentation": {
                 "order": 1
             }
