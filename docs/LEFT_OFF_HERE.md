@@ -1,8 +1,27 @@
-# Left Off Here - Rocket + Fly Away Combo Complete
+# Left Off Here - Analytics System Planning
+
+**Date**: 2025-11-12
+**Branch**: `refactor/variable-boards` (PR #25 ready for review)
+**Status**: 📋 Planning analytics system for level balancing
+
+## Next Feature: Game Analytics & Level Balancing
+
+**Objective**: Track level attempts and success rates to optimize difficulty for 60-70% target
+
+**Documentation**: See [docs/ANALYTICS_PLAN.md](ANALYTICS_PLAN.md) for complete implementation plan
+
+**Next Steps**:
+1. Review and merge PR #25 (Rocket + Fly Away combo)
+2. Create new branch: `feature/analytics-system`
+3. Start Phase 1: Data collection API and tracking
+
+---
+
+## Latest Completed: Rocket + Fly Away Combo
 
 **Date**: 2025-11-12
 **Branch**: `refactor/variable-boards`
-**Status**: ✅ Rocket + Fly Away combo feature completed and tested
+**Status**: ✅ Feature complete - PR #25 ready for review
 
 ## Latest Completed Feature: Rocket + Fly Away Combo
 
