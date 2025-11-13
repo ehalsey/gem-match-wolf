@@ -9,6 +9,7 @@
     "prestart": "npm run build",
     "start": "func start",
     "storage": "azurite --silent --location azurite --debug azurite/debug.log",
+    "storage:verbose": "azurite --location azurite --debug azurite/debug.log",
     "start:local": "npm run build && start /B azurite --silent && func start",
     "test": "jest",
     "test:watch": "jest --watch",

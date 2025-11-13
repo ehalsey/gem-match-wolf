@@ -4,6 +4,8 @@ This directory contains VS Code configurations for debugging and running the Gem
 
 ## Quick Start
 
+**Important:** Before using F5, stop any manually running terminals (Azurite, Azure Functions, dev server).
+
 Press **F5** or go to **Run and Debug** (Ctrl+Shift+D) and select one of these configurations:
 
 ### 🚀 Full Stack (Game + API + Azurite) - RECOMMENDED

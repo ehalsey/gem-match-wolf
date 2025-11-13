@@ -44,12 +44,14 @@
 				"Start Azurite",
 				"npm watch (functions)"
 			],
+			"dependsOrder": "sequence",
 			"options": {
 				"cwd": "${workspaceFolder}/api"
 			},
 			"presentation": {
 				"reveal": "always",
-				"panel": "new"
+				"panel": "dedicated",
+				"focus": false
 			}
 		},
 		{
@@ -98,7 +100,7 @@
 		{
 			"type": "shell",
 			"label": "Start Azurite",
-			"command": "npm run storage",
+			"command": "npm run storage:verbose",
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {
@@ -107,8 +109,8 @@
 				},
 				"background": {
 					"activeOnStart": true,
-					"beginsPattern": ".*Azurite.*starting.*",
-					"endsPattern": ".*Azurite.*successfully started.*"
+					"beginsPattern": "Azurite Blob service is starting",
+					"endsPattern": "Azurite Table service is successfully listening"
 				}
 			},
 			"options": {
@@ -116,7 +118,8 @@
 			},
 			"presentation": {
 				"reveal": "always",
-				"panel": "new"
+				"panel": "dedicated",
+				"focus": false
 			}
 		}
 	]
