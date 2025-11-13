@@ -1,10 +1,18 @@
 name: Playwright E2E
 
 on:
+  # Only run on pull requests to avoid duplicate runs
+  # (push to PR branch triggers both 'push' and 'pull_request' events)
   pull_request:
     branches: [ '**' ]
+  # Also run on direct pushes to master (not via PR)
   push:
     branches: [ 'master' ]
+
+# Prevent duplicate runs for the same PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
