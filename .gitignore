@@ -6,6 +6,10 @@ sourcegem-match-wolf-clone/
 *.azurite/
 bejeweled/srcindex.ts
 
+# Azurite local storage files
+AzuriteConfig
+__azurite_db_*.json
+
 # Playwright test artifacts
 playwright-report/
 test-results/
