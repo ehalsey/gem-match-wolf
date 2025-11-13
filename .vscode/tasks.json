@@ -35,6 +35,24 @@
 			}
 		},
 		{
+			"type": "func",
+			"label": "func: host start with azurite",
+			"command": "host start",
+			"problemMatcher": "$func-node-watch",
+			"isBackground": true,
+			"dependsOn": [
+				"Start Azurite",
+				"npm watch (functions)"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/api"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
 			"type": "shell",
 			"label": "npm build (functions)",
 			"command": "npm run build",
@@ -75,6 +93,30 @@
 			"problemMatcher": [],
 			"options": {
 				"cwd": "${workspaceFolder}/api"
+			}
+		},
+		{
+			"type": "shell",
+			"label": "Start Azurite",
+			"command": "npm run storage",
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(.*)$",
+					"file": 1
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*Azurite.*starting.*",
+					"endsPattern": ".*Azurite.*successfully started.*"
+				}
+			},
+			"options": {
+				"cwd": "${workspaceFolder}/api"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "new"
 			}
 		}
 	]

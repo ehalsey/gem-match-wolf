@@ -36,6 +36,44 @@
             "restart": true,
             "port": 9229,
             "preLaunchTask": "func: host start"
+        },
+        {
+            "name": "Launch Azure Functions + Azurite",
+            "type": "node",
+            "request": "attach",
+            "restart": true,
+            "port": 9229,
+            "preLaunchTask": "func: host start with azurite"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "🚀 Full Stack (Game + API + Azurite)",
+            "configurations": [
+                "Launch Game (Chrome)",
+                "Launch Azure Functions + Azurite"
+            ],
+            "presentation": {
+                "order": 1
+            }
+        },
+        {
+            "name": "🎮 Game Only (Chrome)",
+            "configurations": [
+                "Launch Game (Chrome)"
+            ],
+            "presentation": {
+                "order": 2
+            }
+        },
+        {
+            "name": "🎮 Game Only (Edge)",
+            "configurations": [
+                "Launch Game (Edge)"
+            ],
+            "presentation": {
+                "order": 3
+            }
         }
     ]
 }
