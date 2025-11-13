@@ -9,6 +9,7 @@ import {
 import { ConfirmPopup } from './ConfirmPopup'
 import { ScoreStorageService } from './ScoreStorageService'
 import { LevelSystem, type Challenge, type LevelConfig } from './LevelSystem'
+import { HighScoreAPI } from './api/HighScoreAPI'
 import { MatchDetector } from './game/MatchDetector'
 import { PowerUpSystem } from './game/PowerUpSystem'
 import { BoardState, type BoardConfig } from './game/BoardState'
@@ -65,6 +66,12 @@ export default class GameScene extends Phaser.Scene {
   hammerModeActive: boolean
   bugReportFirstCell: Cell | null
   gameSpeed: number
+
+  // Analytics tracking
+  levelAttemptStartTime: Date | null
+  powerUpsCreatedCount: number
+  maxComboChain: number
+  highScoreAPI: HighScoreAPI
 
   constructor () {
     super({
@@ -180,6 +187,12 @@ export default class GameScene extends Phaser.Scene {
     this.levelConfig = LevelSystem.getCurrentLevelConfig()
     this.currentChallenge = { ...this.levelConfig.challenge }  // Clone the challenge
 
+    // Initialize analytics tracking
+    this.highScoreAPI = new HighScoreAPI()
+    this.levelAttemptStartTime = new Date()
+    this.powerUpsCreatedCount = 0
+    this.maxComboChain = 0
+
     this.initBoard()
 
     // Save initial board state for retry functionality
@@ -272,6 +285,11 @@ export default class GameScene extends Phaser.Scene {
     this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
     this.registry.events.emit('LIVES_UPDATED')
 
+    // Reset analytics tracking for new attempt
+    this.levelAttemptStartTime = new Date()
+    this.powerUpsCreatedCount = 0
+    this.maxComboChain = 0
+
     if (this.gameOverScreen) {
       this.gameOverScreen.destroy()
       this.gameOverScreen = null
@@ -295,6 +313,11 @@ export default class GameScene extends Phaser.Scene {
     // Load level score (already reset to 0 in gameOver)
     this.setScore(LevelSystem.getLevelScore())
     this.setMoves(this.levelConfig.moves)
+
+    // Reset analytics tracking for new level
+    this.levelAttemptStartTime = new Date()
+    this.powerUpsCreatedCount = 0
+    this.maxComboChain = 0
 
     // Notify MenuScene of new challenge and level
     this.registry.events.emit('CHALLENGE_UPDATED', this.currentChallenge)
@@ -473,6 +496,10 @@ export default class GameScene extends Phaser.Scene {
     if (!this.comboText || !this.comboContainer) return
 
     this.currentCombo = combo
+    // Track max combo for analytics
+    if (combo > this.maxComboChain) {
+      this.maxComboChain = combo
+    }
 
     // Stop any existing tweens on the combo container to prevent conflicts
     this.tweens.killTweensOf(this.comboContainer)
@@ -1261,8 +1288,87 @@ export default class GameScene extends Phaser.Scene {
     return winningMoves
   }
 
+  /**
+   * Calculate level progress for analytics tracking
+   * Returns a value from 0 to 100 representing how close the player was to completing the challenge
+   */
+  calculateProgress (): number {
+    if (!this.currentChallenge) return 0
+
+    const { type, currentValue, targetValue} = this.currentChallenge
+
+    if (!targetValue || targetValue === 0) return 0
+
+    // Calculate percentage progress
+    const progress = Math.min(100, (currentValue / targetValue) * 100)
+
+    return Math.round(progress)
+  }
+
+  /**
+   * Track level attempt for analytics
+   */
+  private async trackLevelAttempt (success: boolean): Promise<void> {
+    if (!this.levelAttemptStartTime) {
+      console.warn('[Analytics] Level attempt start time not set')
+      return
+    }
+
+    try {
+      const duration = (Date.now() - this.levelAttemptStartTime.getTime()) / 1000
+      const currentLevel = LevelSystem.getCurrentLevel()
+
+      const attempt = {
+        // Level Info
+        levelNumber: currentLevel,
+        challengeType: this.currentChallenge.type,
+        challengeTarget: this.currentChallenge.color || this.currentChallenge.powerUpType,
+        targetValue: this.currentChallenge.targetValue,
+
+        // Attempt Info
+        success: success,
+        movesTaken: this.levelConfig.moves - this.moves,
+        movesRemaining: this.moves,
+        duration: Math.round(duration),
+        finalProgress: this.calculateProgress(),
+
+        // Additional Context
+        powerUpsUsed: this.powerUpsCreatedCount, // For Phase 1, this will be 0
+        comboMaxChain: this.maxComboChain,
+        finalScore: this.score,
+
+        // Metadata
+        gameVersion: '1.0.0'
+      }
+
+      console.log('[Analytics] Tracking level attempt:', attempt)
+
+      // Try to track, but don't block game flow if it fails
+      const result = await this.highScoreAPI.trackLevelAttempt(attempt)
+
+      if (!result.success) {
+        console.warn('[Analytics] Failed to track level attempt:', result.error)
+        // Queue for retry if network failed
+        if (result.error?.includes('Network')) {
+          this.highScoreAPI.queueLevelAttempt(attempt)
+        }
+      } else {
+        console.log('[Analytics] Level attempt tracked successfully')
+        // Try to process any queued attempts
+        this.highScoreAPI.processLevelAttemptQueue().catch(() => {
+          // Silently fail - queued attempts will be retried later
+        })
+      }
+    } catch (error) {
+      console.error('[Analytics] Error tracking level attempt:', error)
+    }
+  }
+
   gameOver (message: string = 'Game Over', isLevelComplete: boolean = false, canRetry: boolean = false) {
     this.isGameOver = true
+
+    // Track level attempt for analytics (do this early before state changes)
+    this.trackLevelAttempt(isLevelComplete)
 
     // If level complete, show new level complete screen with stars
     if (isLevelComplete) {
