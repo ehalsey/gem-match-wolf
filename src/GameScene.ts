@@ -1837,12 +1837,18 @@ export default class GameScene extends Phaser.Scene {
             // Up cell
             const upRow = cell.row - distance
             if (upRow >= 0) {
-              cellsAtDistance.push(this.board[upRow][cell.column])
+              const upCell = this.board[upRow][cell.column]
+              if (upCell) {
+                cellsAtDistance.push(upCell)
+              }
             }
             // Down cell
             const downRow = cell.row + distance
             if (downRow < size) {
-              cellsAtDistance.push(this.board[downRow][cell.column])
+              const downCell = this.board[downRow][cell.column]
+              if (downCell) {
+                cellsAtDistance.push(downCell)
+              }
             }
           }
 
@@ -2572,12 +2578,18 @@ export default class GameScene extends Phaser.Scene {
         // Up cell
         const upRow = cell.row - distance
         if (upRow >= 0) {
-          cellsAtDistance.push(this.board[upRow][cell.column])
+          const upCell = this.board[upRow][cell.column]
+          if (upCell) {
+            cellsAtDistance.push(upCell)
+          }
         }
         // Down cell
         const downRow = cell.row + distance
         if (downRow < size) {
-          cellsAtDistance.push(this.board[downRow][cell.column])
+          const downCell = this.board[downRow][cell.column]
+          if (downCell) {
+            cellsAtDistance.push(downCell)
+          }
         }
       }
 
