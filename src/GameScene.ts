@@ -165,7 +165,7 @@ export default class GameScene extends Phaser.Scene {
       console.log('  - ?debug=true - Enable debug mode')
       console.log('  - ?board=match4h - Load test board')
       console.log('  - ?seed=12345 - Set random seed')
-      console.log('[DEBUG] Available test boards: match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, rocket-flyaway-combo, rocket-flyaway-combo-vertical, rocket-match-order, light-ball-combo, hammer-test, level5-snapshot')
+      console.log('[DEBUG] Available test boards: octagon, diamond, match5, match4h, match4v, lshape-right-up, lshape-left-up, lshape-right-down, lshape-left-down, tshape-down, tshape-up, tshape-right, tshape-left, rect3x2, rect2x3, square, square-left, square-expand, tnt-test, double-flyaway, vertical-rocket-combo, horizontal-rocket-combo, rocket-flyaway-combo, rocket-flyaway-combo-vertical, rocket-match-order, light-ball-combo, hammer-test, level5-snapshot')
     }
 
     this.createBackground()
@@ -672,9 +672,15 @@ export default class GameScene extends Phaser.Scene {
    */
   saveInitialBoardState () {
     this.initialBoardState = []
-    for (let row = 0; row < size; row++) {
-      for (let column = 0; column < size; column++) {
-        const cell = this.board[row][column]
+    const board = this.boardState.getRawBoard()
+    const config = this.levelConfig?.boardConfig || { width: size, height: size }
+
+    for (let row = 0; row < config.height; row++) {
+      for (let column = 0; column < config.width; column++) {
+        const cell = board[row][column]
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) continue
+
         this.initialBoardState.push({
           row: cell.row,
           column: cell.column,
@@ -733,9 +739,15 @@ export default class GameScene extends Phaser.Scene {
       moves: this.moves
     }
 
-    for (let row = 0; row < size; row++) {
-      for (let column = 0; column < size; column++) {
-        const cell = this.board[row][column]
+    const board = this.boardState.getRawBoard()
+    const config = this.levelConfig?.boardConfig || { width: size, height: size }
+
+    for (let row = 0; row < config.height; row++) {
+      for (let column = 0; column < config.width; column++) {
+        const cell = board[row][column]
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) continue
+
         this.undoSnapshot.board.push({
           row: cell.row,
           column: cell.column,
@@ -759,9 +771,15 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Destroy current board sprites
-    for (let row = 0; row < size; row++) {
-      for (let column = 0; column < size; column++) {
-        const cell = this.board[row][column]
+    const board = this.boardState.getRawBoard()
+    const config = this.levelConfig?.boardConfig || { width: size, height: size }
+
+    for (let row = 0; row < config.height; row++) {
+      for (let column = 0; column < config.width; column++) {
+        const cell = board[row][column]
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) continue
+
         if (cell.sprite) {
           cell.sprite.destroy()
         }
@@ -1266,19 +1284,28 @@ export default class GameScene extends Phaser.Scene {
         const right = this.board[row][column + 1]
         const down = this.board[row + 1][column]
 
-        // Swap right
-        this.swapCells(cell, right)
-        if (MatchDetector.boardShouldExplode(this.board)) {
-          winningMoves.push({ cell1: cell, cell2: right })
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) {
+          continue
         }
-        this.swapCells(cell, right)
+
+        // Swap right
+        if (right) {
+          this.swapCells(cell, right)
+          if (MatchDetector.boardShouldExplode(this.board)) {
+            winningMoves.push({ cell1: cell, cell2: right })
+          }
+          this.swapCells(cell, right)
+        }
 
         // Swap down
-        this.swapCells(cell, down)
-        if (MatchDetector.boardShouldExplode(this.board)) {
-          winningMoves.push({ cell1: cell, cell2: down })
+        if (down) {
+          this.swapCells(cell, down)
+          if (MatchDetector.boardShouldExplode(this.board)) {
+            winningMoves.push({ cell1: cell, cell2: down })
+          }
+          this.swapCells(cell, down)
         }
-        this.swapCells(cell, down)
       }
     }
 
@@ -2614,7 +2641,8 @@ export default class GameScene extends Phaser.Scene {
         let count = 0
         for (let col = 0; col < size; col++) {
           const cell = this.board[row][col]
-          if (!cell.empty && cell.color === targetColor) {
+          // Skip null cells (for non-rectangular boards)
+          if (cell && !cell.empty && cell.color === targetColor) {
             count++
           }
         }
@@ -2637,7 +2665,8 @@ export default class GameScene extends Phaser.Scene {
         for (let col = 0; col < size - 1; col++) {
           const cell = this.board[row][col]
           const next = this.board[row][col + 1]
-          if (!cell.empty && !next.empty && cell.color === next.color) {
+          // Skip null cells (for non-rectangular boards)
+          if (cell && next && !cell.empty && !next.empty && cell.color === next.color) {
             potential++
           }
         }
@@ -2672,7 +2701,8 @@ export default class GameScene extends Phaser.Scene {
         let count = 0
         for (let row = 0; row < size; row++) {
           const cell = this.board[row][col]
-          if (!cell.empty && cell.color === targetColor) {
+          // Skip null cells (for non-rectangular boards)
+          if (cell && !cell.empty && cell.color === targetColor) {
             count++
           }
         }
@@ -2695,7 +2725,8 @@ export default class GameScene extends Phaser.Scene {
         for (let row = 0; row < size - 1; row++) {
           const cell = this.board[row][col]
           const next = this.board[row + 1][col]
-          if (!cell.empty && !next.empty && cell.color === next.color) {
+          // Skip null cells (for non-rectangular boards)
+          if (cell && next && !cell.empty && !next.empty && cell.color === next.color) {
             potential++
           }
         }
@@ -2763,13 +2794,17 @@ export default class GameScene extends Phaser.Scene {
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const cell = this.board[row][col]
+
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) continue
+
         // Skip if cell is empty, a power-up, the source cell, or already targeted
         if (cell.empty || cell.powerup || cell === fromCell) continue
         if (targetedCells && targetedCells.has(cell)) continue
 
         // Count how many neighbors match this cell's color
         const neighbors = this.getNeighbors(cell)
-        const matchCount = neighbors.filter(n => !n.empty && !n.powerup && n.color === cell.color).length
+        const matchCount = neighbors.filter(n => n && !n.empty && !n.powerup && n.color === cell.color).length
 
         if (matchCount > bestScore) {
           bestScore = matchCount
@@ -2959,10 +2994,20 @@ export default class GameScene extends Phaser.Scene {
 
   logBoardState () {
     console.log('Board State:')
-    for (let row = 0; row < size; row++) {
+    const board = this.boardState.getRawBoard()
+    const config = this.levelConfig?.boardConfig || { width: size, height: size }
+
+    for (let row = 0; row < config.height; row++) {
       const rowData = []
-      for (let col = 0; col < size; col++) {
-        const cell = this.board[row][col]
+      for (let col = 0; col < config.width; col++) {
+        const cell = board[row][col]
+
+        // Handle null cells (for non-rectangular boards)
+        if (!cell) {
+          rowData.push('    (NULL)')
+          continue
+        }
+
         const spriteExists = cell.sprite && !cell.sprite.scene ? 'DESTROYED_SPRITE' : 'OK'
         const display = cell.empty
           ? '____'
@@ -2979,6 +3024,12 @@ export default class GameScene extends Phaser.Scene {
     for (let column = 0; column < size; column++) {
       for (let row = size - 1; row >= 0; row--) {
         const cell = this.board[row][column]
+
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) {
+          continue
+        }
+
         const lowestEmptyCell = this.getLowestEmptyCellBelow(cell)
 
         if (lowestEmptyCell !== null && !cell.empty) {
@@ -2997,12 +3048,23 @@ export default class GameScene extends Phaser.Scene {
 
     for (let column = 0; column < size; column++) {
       let numberOfEmptyCells = 0
-      while (numberOfEmptyCells < size && this.board[numberOfEmptyCells][column].empty) {
+      while (numberOfEmptyCells < size) {
+        const cell = this.board[numberOfEmptyCells][column]
+        // Skip null cells (for non-rectangular boards) or stop when we hit a non-empty cell
+        if (!cell || !cell.empty) {
+          break
+        }
         numberOfEmptyCells++
       }
 
       for (let row = 0; row < numberOfEmptyCells; row++) {
         const cell = this.board[row][column]
+
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) {
+          continue
+        }
+
         cell.color = Phaser.Math.RND.pick(levelGems)
         cell.empty = false
         cell.powerup = null
@@ -3020,6 +3082,12 @@ export default class GameScene extends Phaser.Scene {
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const cell = this.board[row][col]
+
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) {
+          continue
+        }
+
         if (!cell.empty && !cell.powerup && !cell.sprite) {
           console.warn(`[REFILL] Cell [${row},${col}] is non-empty but has no sprite! Creating sprite for ${cell.color}`)
           const x = col * CELL_SIZE + CELL_SIZE / 2
@@ -3038,7 +3106,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   async moveSpritesWhereTheyBelong () {
-    const cells = this.board.flat()
+    const cells = this.board.flat().filter(cell => cell !== null)
     const animationsPromises = []
 
     for (const cell of cells) {
@@ -3076,6 +3144,12 @@ export default class GameScene extends Phaser.Scene {
   getLowestEmptyCellBelow (cell: Cell): Cell {
     for (let row = size - 1; row > cell.row; row--) {
       const belowCell = this.board[row][cell.column]
+
+      // Skip null cells (for non-rectangular boards)
+      if (!belowCell) {
+        continue
+      }
+
       if (belowCell.empty) {
         return belowCell
       }
@@ -3175,10 +3249,23 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getCellsToDestroy (): Cell[] {
-    return this.board.flat().filter(cell =>
-      // Destroy cells that should explode (matching 3+), are marked for destruction, or are already empty
-      (MatchDetector.shouldExplode(cell, this.board) || cell.markedForDestruction || cell.empty) && !cell.powerup
-    )
+    try {
+      const board = this.boardState.getRawBoard()
+      return board.flat().filter(cell => {
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) {
+          return false
+        }
+
+        // Destroy cells that should explode (matching 3+), are marked for destruction, or are already empty
+        return (MatchDetector.shouldExplode(cell, board) || cell.markedForDestruction || cell.empty) && !cell.powerup
+      })
+    } catch (error) {
+      console.error('[ERROR] getCellsToDestroy failed:', error)
+      console.error('[ERROR] Board state:', this.boardState?.getConfig())
+      this.logBoardState()
+      throw error
+    }
   }
 
   selectCell (cell: Cell) {
@@ -3222,6 +3309,11 @@ export default class GameScene extends Phaser.Scene {
   }
 
   swapCells (firstCell: Cell, secondCell: Cell) {
+    // Handle null cells (for non-rectangular boards)
+    if (!firstCell || !secondCell) {
+      return
+    }
+
     const firstCellCopy = { ...firstCell }
     firstCell.row = secondCell.row
     firstCell.column = secondCell.column
@@ -3232,10 +3324,16 @@ export default class GameScene extends Phaser.Scene {
     this.board[secondCell.row][secondCell.column] = secondCell
   }
 
-  getCellAt (pointer: Phaser.Input.Pointer): Cell {
+  getCellAt (pointer: Phaser.Input.Pointer): Cell | null {
     const row = Math.floor(pointer.worldY / CELL_SIZE)
     const column = Math.floor(pointer.worldX / CELL_SIZE)
 
+    // Check bounds
+    if (row < 0 || row >= size || column < 0 || column >= size) {
+      return null
+    }
+
+    // Return cell (may be null for non-rectangular boards)
     return this.board[row][column]
   }
 
@@ -3246,9 +3344,15 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Find the cell for this sprite
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        const cell = this.board[row][col]
+    const board = this.boardState.getRawBoard()
+    const config = this.levelConfig?.boardConfig || { width: size, height: size }
+
+    for (let row = 0; row < config.height; row++) {
+      for (let col = 0; col < config.width; col++) {
+        const cell = board[row][col]
+        // Skip null cells (for non-rectangular boards)
+        if (!cell) continue
+
         if (cell.sprite === gameObject) {
           this.draggedCell = cell
           this.dragStartX = gameObject.x
@@ -3651,11 +3755,17 @@ export default class GameScene extends Phaser.Scene {
    */
   exportBoard () {
     const boardData = []
-    for (let row = 0; row < size; row++) {
+    const board = this.boardState.getRawBoard()
+    const config = this.levelConfig?.boardConfig || { width: size, height: size }
+
+    for (let row = 0; row < config.height; row++) {
       const rowData = []
-      for (let col = 0; col < size; col++) {
-        const cell = this.board[row][col]
-        if (cell.powerup) {
+      for (let col = 0; col < config.width; col++) {
+        const cell = board[row][col]
+        // Handle null cells (for non-rectangular boards)
+        if (!cell) {
+          rowData.push('    ')
+        } else if (cell.powerup) {
           rowData.push(`[${cell.powerup}]`)
         } else if (cell.empty) {
           rowData.push('____')
@@ -4238,6 +4348,110 @@ export default class GameScene extends Phaser.Scene {
       this.spawnPowerup('fly-away', 4, 4)
       console.log(`[DEBUG] Loaded ${name} with 2 fly-away power-ups at [4,3] and [4,4]`)
       console.log('[DEBUG] Click one to activate and test interaction between adjacent fly-aways')
+      return
+    }
+
+    if (name.toLowerCase() === 'octagon-test' || name.toLowerCase() === 'octagon') {
+      // Test board for octagon shape - tests null safety on non-rectangular boards
+      console.log('[DEBUG] Loading octagon test board (9x9 with corners missing)')
+
+      // Create octagon board configuration (same as level 21)
+      const octagonConfig = {
+        width: 9,
+        height: 9,
+        shape: 'octagon' as const,
+        missingCells: [
+          // Top-left corner
+          { row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 },
+          { row: 1, col: 0 }, { row: 1, col: 1 },
+          { row: 2, col: 0 },
+          // Top-right corner
+          { row: 0, col: 6 }, { row: 0, col: 7 }, { row: 0, col: 8 },
+          { row: 1, col: 7 }, { row: 1, col: 8 },
+          { row: 2, col: 8 },
+          // Bottom-left corner
+          { row: 6, col: 0 },
+          { row: 7, col: 0 }, { row: 7, col: 1 },
+          { row: 8, col: 0 }, { row: 8, col: 1 }, { row: 8, col: 2 },
+          // Bottom-right corner
+          { row: 6, col: 8 },
+          { row: 7, col: 7 }, { row: 7, col: 8 },
+          { row: 8, col: 6 }, { row: 8, col: 7 }, { row: 8, col: 8 }
+        ]
+      }
+
+      // Reinitialize board with octagon configuration
+      this.boardState = new BoardState(octagonConfig)
+      const board = this.boardState.getRawBoard()
+
+      // Fill board with random gems (avoiding matches)
+      for (let row = 0; row < octagonConfig.height; row++) {
+        for (let col = 0; col < octagonConfig.width; col++) {
+          const cell = board[row][col]
+          if (cell) {
+            cell.color = gems[Math.floor(Math.random() * gems.length)]
+            cell.empty = false
+            const x = col * CELL_SIZE + CELL_SIZE / 2
+            const y = row * CELL_SIZE + CELL_SIZE / 2
+            cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+              .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+              .setInteractive({ draggable: true })
+          }
+        }
+      }
+
+      console.log('[DEBUG] Octagon board loaded successfully')
+      console.log('[DEBUG] Null cells at corners - test making moves and using exportBoard()')
+      console.log('[DEBUG] Try: gameDebug.exportBoard() or Shift+Click to test bug reporting')
+      return
+    }
+
+    if (name.toLowerCase() === 'diamond-test' || name.toLowerCase() === 'diamond') {
+      // Test board for diamond shape - tests null safety on non-rectangular boards
+      console.log('[DEBUG] Loading diamond test board (9x9 with more corners missing)')
+
+      // Create diamond board configuration (same as level 22)
+      const diamondConfig = {
+        width: 9,
+        height: 9,
+        shape: 'diamond' as const,
+        missingCells: [
+          // Top section
+          { row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 }, { row: 0, col: 3 }, { row: 0, col: 5 }, { row: 0, col: 6 }, { row: 0, col: 7 }, { row: 0, col: 8 },
+          { row: 1, col: 0 }, { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 6 }, { row: 1, col: 7 }, { row: 1, col: 8 },
+          { row: 2, col: 0 }, { row: 2, col: 1 }, { row: 2, col: 7 }, { row: 2, col: 8 },
+          { row: 3, col: 0 }, { row: 3, col: 8 },
+          // Bottom section
+          { row: 5, col: 0 }, { row: 5, col: 8 },
+          { row: 6, col: 0 }, { row: 6, col: 1 }, { row: 6, col: 7 }, { row: 6, col: 8 },
+          { row: 7, col: 0 }, { row: 7, col: 1 }, { row: 7, col: 2 }, { row: 7, col: 6 }, { row: 7, col: 7 }, { row: 7, col: 8 },
+          { row: 8, col: 0 }, { row: 8, col: 1 }, { row: 8, col: 2 }, { row: 8, col: 3 }, { row: 8, col: 5 }, { row: 8, col: 6 }, { row: 8, col: 7 }, { row: 8, col: 8 }
+        ]
+      }
+
+      // Reinitialize board with diamond configuration
+      this.boardState = new BoardState(diamondConfig)
+      const board = this.boardState.getRawBoard()
+
+      // Fill board with random gems (avoiding matches)
+      for (let row = 0; row < diamondConfig.height; row++) {
+        for (let col = 0; col < diamondConfig.width; col++) {
+          const cell = board[row][col]
+          if (cell) {
+            cell.color = gems[Math.floor(Math.random() * gems.length)]
+            cell.empty = false
+            const x = col * CELL_SIZE + CELL_SIZE / 2
+            const y = row * CELL_SIZE + CELL_SIZE / 2
+            cell.sprite = this.add.sprite(x, y, this.getCellTexture(cell))
+              .setDisplaySize(CELL_SIZE * 0.9, CELL_SIZE * 0.9)
+              .setInteractive({ draggable: true })
+          }
+        }
+      }
+
+      console.log('[DEBUG] Diamond board loaded successfully')
+      console.log('[DEBUG] Null cells forming diamond shape - test making moves and pattern detection')
+      console.log('[DEBUG] Try: gameDebug.exportBoard() or Shift+Click to test bug reporting')
       return
     }
 

@@ -30,7 +30,7 @@ export class PowerUpSystem {
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const topLeft = board[row][col]
-        if (topLeft.empty || topLeft.powerup) continue
+        if (!topLeft || topLeft.empty || topLeft.powerup) continue
 
         // 3x2 horizontal rectangle (3 columns, 2 rows)
         if (col <= size - 3 && row <= size - 2) {
@@ -43,7 +43,7 @@ export class PowerUpSystem {
             board[row + 1][col + 2]
           ]
 
-          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color)) {
+          if (cells.every(c => c && !c.empty && !c.powerup && c.color === topLeft.color)) {
             // Place power-up in center of rectangle (middle of top row)
             patterns.push({ cell: board[row][col + 1], type: 'tnt', cells, priority: 3 })
           }
@@ -60,7 +60,7 @@ export class PowerUpSystem {
             board[row + 2][col + 1]
           ]
 
-          if (cells.every(c => !c.empty && !c.powerup && c.color === topLeft.color)) {
+          if (cells.every(c => c && !c.empty && !c.powerup && c.color === topLeft.color)) {
             // Place power-up in center of rectangle (middle row, left column)
             patterns.push({ cell: board[row + 1][col], type: 'tnt', cells, priority: 3 })
           }
@@ -75,6 +75,9 @@ export class PowerUpSystem {
         const topRight = board[row][col + 1]
         const bottomLeft = board[row + 1][col]
         const bottomRight = board[row + 1][col + 1]
+
+        // Check for null cells (non-rectangular boards)
+        if (!topLeft || !topRight || !bottomLeft || !bottomRight) continue
 
         const squareCells = [topLeft, topRight, bottomLeft, bottomRight]
 
@@ -175,7 +178,7 @@ export class PowerUpSystem {
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const center = board[row][col]
-        if (center.empty || center.powerup) continue
+        if (!center || center.empty || center.powerup) continue
 
         // T-shape 1: T pointing down (3 across + 2 down from center)
         // Pattern: X X X
@@ -188,7 +191,7 @@ export class PowerUpSystem {
           const down2 = board[row + 2][col]
           const tCells = [center, left, right, down1, down2]
 
-          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (tCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
           }
         }
@@ -204,7 +207,7 @@ export class PowerUpSystem {
           const up2 = board[row - 2][col]
           const tCells = [center, left, right, up1, up2]
 
-          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (tCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
           }
         }
@@ -220,7 +223,7 @@ export class PowerUpSystem {
           const right2 = board[row][col + 2]
           const tCells = [center, up, down, right1, right2]
 
-          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (tCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
           }
         }
@@ -236,7 +239,7 @@ export class PowerUpSystem {
           const left2 = board[row][col - 2]
           const tCells = [center, up, down, left1, left2]
 
-          if (tCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (tCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: tCells, priority: 3 })
           }
         }
@@ -247,7 +250,7 @@ export class PowerUpSystem {
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const center = board[row][col]
-        if (center.empty || center.powerup) continue
+        if (!center || center.empty || center.powerup) continue
 
         // L-shape 1: └ (right and up)
         if (col <= size - 3 && row >= 2) {
@@ -257,7 +260,7 @@ export class PowerUpSystem {
           const up2 = board[row - 2][col]
           const lCells = [center, right1, right2, up1, up2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (lCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }
@@ -270,7 +273,7 @@ export class PowerUpSystem {
           const up2 = board[row - 2][col]
           const lCells = [center, left1, left2, up1, up2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (lCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }
@@ -283,7 +286,7 @@ export class PowerUpSystem {
           const down2 = board[row + 2][col]
           const lCells = [center, right1, right2, down1, down2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (lCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }
@@ -296,7 +299,7 @@ export class PowerUpSystem {
           const down2 = board[row + 2][col]
           const lCells = [center, left1, left2, down1, down2]
 
-          if (lCells.every(c => !c.empty && !c.powerup && c.color === center.color)) {
+          if (lCells.every(c => c && !c.empty && !c.powerup && c.color === center.color)) {
             patterns.push({ cell: center, type: 'tnt', cells: lCells, priority: 3 })
           }
         }

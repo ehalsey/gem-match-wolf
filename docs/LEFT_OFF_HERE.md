@@ -1,4 +1,81 @@
-# Left Off Here - Analytics Phase 1 Implementation
+# Left Off Here - Non-Rectangular Board Null Safety Complete
+
+**Date**: 2025-11-13
+**Branch**: `feature/analytics-phase1-data-collection`
+**Status**: ✅ ALL null reference errors fixed for non-rectangular boards (12 total fixes)
+
+## Recent Work: Comprehensive Null Safety Audit (2025-11-13) ✅
+
+**Problem**: Game was crashing on level 21 (octagon) and level 22 (diamond) when making moves. Original code assumed rectangular 8x8 boards, but non-rectangular boards have `null` cells in corners/edges.
+
+**Root Cause**: All board iteration code assumed `board[row][col]` was never null. Non-rectangular boards use null to represent missing cells in the 2D array.
+
+### All Errors Fixed (12 total)
+
+**Encountered During Gameplay (8 errors)**:
+1. `GameScene.ts:2582` - logBoardState() - "Cannot read properties of null (reading 'sprite')"
+2. `MatchDetector.ts:94` - shouldExplode() - "Cannot read properties of null (reading 'powerup')"
+3. `GameScene.ts:3205` - getCellsToDestroy() - board.flat() includes null cells
+4. `GameScene.ts:2687` - getLowestEmptyCellBelow() - "Cannot read properties of null (reading 'row')"
+5. `GameScene.ts:3006` - makeCellsFall() - passing null cells to methods
+6. `GameScene.ts:3034` - refillBoard() - accessing .empty on null cells
+7. `GameScene.ts:1067` - getWinningMoves() - passing null cells to swapCells()
+8. `GameScene.ts:2847` - swapCells() - "Cannot read properties of null (reading 'row')"
+
+**Proactive Fixes (4 additional issues found)**:
+9. `GameScene.ts:3319` - getCellAt() - no bounds checking, no null return type
+10. `GameScene.ts:2784` - findBestFlyAwayTarget() - accessing cell.empty without null check
+11. `GameScene.ts:2627` - findBestRowForRocket() - accessing cell.empty/color without null check
+12. `GameScene.ts:2687` - findBestColumnForRocket() - accessing cell.empty/color without null check
+
+**Bug Categories**:
+- **Match Detection & Validation**: 2 bugs (MatchDetector.shouldExplode, getCellsToDestroy)
+- **Logging & Debugging**: 1 bug (logBoardState)
+- **Game Flow - Gravity & Refill**: 3 bugs (makeCellsFall, getLowestEmptyCellBelow, refillBoard)
+- **AI Hint System**: 2 bugs (getWinningMoves, swapCells)
+- **Input Handling**: 1 proactive fix (getCellAt)
+- **Power-Up AI Targeting**: 3 proactive fixes (findBestFlyAwayTarget, findBestRowForRocket, findBestColumnForRocket)
+
+### Files Modified
+- `src/GameScene.ts` - 12 methods fixed with null checks and bounds checking
+- `src/game/MatchDetector.ts` - 1 method fixed (shouldExplode)
+- `tests/non-rectangular-test-boards.spec.ts` - NEW automated tests for octagon/diamond boards
+
+### Error Handling Added
+Per user request, added comprehensive try-catch with detailed logging in `getCellsToDestroy()`:
+```typescript
+catch (error) {
+  console.error('[ERROR] getCellsToDestroy failed:', error)
+  console.error('[ERROR] Board state:', this.boardState?.getConfig())
+  this.logBoardState()
+  throw error
+}
+```
+
+### Tests
+- ✅ **Automated Tests**: `tests/non-rectangular-test-boards.spec.ts` - octagon & diamond boards passing
+- ✅ **Manual Test URLs**:
+  - Octagon: `http://localhost:8000/?debug=true&board=octagon`
+  - Diamond: `http://localhost:8000/?debug=true&board=diamond`
+  - Level 21: `http://localhost:8000/?level=21`
+  - Level 22: `http://localhost:8000/?level=22`
+
+### Documentation Created
+**NEW**: `docs/NULL_SAFETY_FIXES.md` - Comprehensive documentation including:
+- All 12 errors with stack traces and fixes
+- Code snippets for each fix
+- Pattern for future development
+- Code review checklist for preventing future null errors
+- Testing instructions
+
+### Build Status
+- ✅ TypeScript compilation: No errors
+- ✅ Webpack build: 146 KiB (main.js)
+- ✅ All automated tests passing
+
+---
+
+# Previous Work: Analytics Phase 1 Implementation
 
 **Date**: 2025-11-12
 **Branch**: `feature/analytics-phase1-data-collection` (PR #26)
