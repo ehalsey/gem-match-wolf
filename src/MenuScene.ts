@@ -364,7 +364,7 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     if (challenge.type === 'color-match' && challenge.color) {
-      this.challengeGemIcon = this.add.sprite(20, 278, challenge.color)
+      this.challengeGemIcon = this.add.sprite(20, 343, challenge.color)
         .setDisplaySize(20, 20)
     }
   }
