@@ -1766,12 +1766,18 @@ export default class GameScene extends Phaser.Scene {
             // Left cell
             const leftCol = cell.column - distance
             if (leftCol >= 0) {
-              cellsAtDistance.push(this.board[cell.row][leftCol])
+              const leftCell = this.board[cell.row][leftCol]
+              if (leftCell) {
+                cellsAtDistance.push(leftCell)
+              }
             }
             // Right cell
             const rightCol = cell.column + distance
             if (rightCol < size) {
-              cellsAtDistance.push(this.board[cell.row][rightCol])
+              const rightCell = this.board[cell.row][rightCol]
+              if (rightCell) {
+                cellsAtDistance.push(rightCell)
+              }
             }
           }
 
@@ -2507,12 +2513,18 @@ export default class GameScene extends Phaser.Scene {
         // Left cell
         const leftCol = cell.column - distance
         if (leftCol >= 0) {
-          cellsAtDistance.push(this.board[cell.row][leftCol])
+          const leftCell = this.board[cell.row][leftCol]
+          if (leftCell) {
+            cellsAtDistance.push(leftCell)
+          }
         }
         // Right cell
         const rightCol = cell.column + distance
         if (rightCol < size) {
-          cellsAtDistance.push(this.board[cell.row][rightCol])
+          const rightCell = this.board[cell.row][rightCol]
+          if (rightCell) {
+            cellsAtDistance.push(rightCell)
+          }
         }
       }
 
