@@ -34,7 +34,7 @@ export default class LevelCompleteScene extends Phaser.Scene {
       .setOrigin(0)
 
     const centerX = BOARD_SIZE / 2
-    let yOffset = 80
+    let yOffset = 120
 
     // Title
     const title = this.add.text(centerX, yOffset, 'LEVEL COMPLETE!', {
