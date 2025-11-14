@@ -1,3 +1,4 @@
+Can we have refill work like fluid? I think this may require gravity?
 1 rocket is too easy for a level
 Should not display new best on level, that should be on the main scene (new)
 Shop should also be on the home/main scene
@@ -12,3 +13,4 @@ rocket explosion
 vertical rocket only exploding up not down too it should do both
 stars on end level screen cut off at top
 dropping two fly aways isn't working. It should execute the two fly aways just as if you clicked separate fly aways but it should also create a new fly away for a total of 3 fly aways that each target the 1st, 2nd and 3rd best options based on the goal.
+Color bomb goal should not be back to back goals

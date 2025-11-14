@@ -13,6 +13,7 @@ This document serves as a quick reference for Claude when working on the Gem Mat
 - **[Features](FEATURES.md)** - Complete list of game features
 - **[Ideas](docs/ideas.md)** - Feature ideas and enhancements
 - **[Left Off Here](docs/LEFT_OFF_HERE.md)** - Current development status
+- **[Null Safety Fixes](docs/NULL_SAFETY_FIXES.md)** - Non-rectangular board null safety patterns
 
 ### System Architecture
 - **[High Score System](HIGH-SCORE-SYSTEM.md)** - Backend API and database schema
@@ -42,6 +43,51 @@ await page.evaluate(async () => {
 
 **See [docs/TEST_APPROACH.md](docs/TEST_APPROACH.md) for complete examples.**
 
+## ⚠️ Critical: Null Safety for Non-Rectangular Boards
+
+**The board array can contain `null` cells!**
+
+Levels 21-22 use non-rectangular boards (octagon, diamond) implemented with `null` cells in corners/edges. **Always check for null before accessing cell properties.**
+
+### Required Pattern
+
+```typescript
+const cell = this.board[row][col]
+
+// Always check for null first!
+if (!cell) {
+  continue  // or return, or whatever is appropriate
+}
+
+// Now safe to access cell properties
+if (cell.empty || cell.powerup) { ... }
+```
+
+### Common Mistakes
+
+❌ **DON'T** assume cells exist:
+```typescript
+// WRONG - crashes on non-rectangular boards!
+const cell = this.board[row][col]
+if (cell.empty) { ... }
+```
+
+❌ **DON'T** forget to filter when flattening:
+```typescript
+// WRONG - includes null cells!
+board.flat().forEach(cell => cell.color)
+
+// CORRECT - filters nulls first
+board.flat().filter(cell => cell !== null).forEach(cell => cell.color)
+```
+
+### Test Non-Rectangular Boards
+
+- Octagon: `http://localhost:8000/?debug=true&board=octagon`
+- Diamond: `http://localhost:8000/?debug=true&board=diamond`
+
+**See [docs/NULL_SAFETY_FIXES.md](docs/NULL_SAFETY_FIXES.md) for complete documentation.**
+
 ## 📁 Key Files
 
 ### Game Logic
@@ -68,6 +114,8 @@ Test boards are defined in `GameScene.ts` in the `loadTestBoard()` method. Examp
 - `double-flyaway` - Two fly aways adjacent
 - `light-ball-combo` - Light ball combos
 - `match5`, `match4h`, `match4v` - Basic pattern tests
+- `octagon` - Non-rectangular 9x9 octagon board (24 null cells)
+- `diamond` - Non-rectangular 9x9 diamond board (40 null cells)
 
 ## 🧪 Testing Workflow
 

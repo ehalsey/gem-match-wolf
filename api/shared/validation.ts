@@ -1,4 +1,4 @@
-import { ScoreSubmission, ValidationResult } from './types'
+import { ScoreSubmission, ValidationResult, LevelAttemptSubmission } from './types'
 import * as crypto from 'crypto'
 
 // Game constants for validation
@@ -83,4 +83,85 @@ export function sanitizePlayerName(name: string): string {
 export function generateSessionHash(score: number, moves: number, duration: number, seed: string): string {
   const data = `${score}:${moves}:${duration}:${seed}`
   return crypto.createHash('sha256').update(data).digest('hex')
+}
+
+// Level Analytics Validation
+const MAX_LEVEL = 100
+const MIN_LEVEL = 1
+const MAX_TARGET_VALUE = 10000
+const MAX_POWER_UPS = 1000
+const MAX_COMBO_CHAIN = 100
+
+export function validateLevelAttempt(attempt: LevelAttemptSubmission): ValidationResult {
+  // Validate level number
+  if (typeof attempt.levelNumber !== 'number' || attempt.levelNumber < MIN_LEVEL || attempt.levelNumber > MAX_LEVEL) {
+    return { valid: false, reason: `Level number must be between ${MIN_LEVEL} and ${MAX_LEVEL}` }
+  }
+
+  // Validate challenge type
+  if (attempt.challengeType !== 'color-match' && attempt.challengeType !== 'power-up-create') {
+    return { valid: false, reason: 'Invalid challenge type' }
+  }
+
+  // Validate target value
+  if (typeof attempt.targetValue !== 'number' || attempt.targetValue < 1 || attempt.targetValue > MAX_TARGET_VALUE) {
+    return { valid: false, reason: `Target value must be between 1 and ${MAX_TARGET_VALUE}` }
+  }
+
+  // Validate success flag
+  if (typeof attempt.success !== 'boolean') {
+    return { valid: false, reason: 'Success must be a boolean' }
+  }
+
+  // Validate moves
+  if (typeof attempt.movesTaken !== 'number' || attempt.movesTaken < 0 || attempt.movesTaken > MAX_MOVES) {
+    return { valid: false, reason: `Moves taken must be between 0 and ${MAX_MOVES}` }
+  }
+
+  if (typeof attempt.movesRemaining !== 'number' || attempt.movesRemaining < 0 || attempt.movesRemaining > MAX_MOVES) {
+    return { valid: false, reason: `Moves remaining must be between 0 and ${MAX_MOVES}` }
+  }
+
+  // Validate duration (relax minimum for testing)
+  const minDuration = process.env.NODE_ENV === 'development' ? 0 : 1
+  if (typeof attempt.duration !== 'number' || attempt.duration < minDuration || attempt.duration > MAX_DURATION) {
+    return { valid: false, reason: 'Invalid game duration' }
+  }
+
+  // Validate progress
+  if (typeof attempt.finalProgress !== 'number' || attempt.finalProgress < 0 || attempt.finalProgress > 100) {
+    return { valid: false, reason: 'Final progress must be between 0 and 100' }
+  }
+
+  // Validate power-ups used
+  if (typeof attempt.powerUpsUsed !== 'number' || attempt.powerUpsUsed < 0 || attempt.powerUpsUsed > MAX_POWER_UPS) {
+    return { valid: false, reason: `Power-ups used must be between 0 and ${MAX_POWER_UPS}` }
+  }
+
+  // Validate combo chain
+  if (typeof attempt.comboMaxChain !== 'number' || attempt.comboMaxChain < 0 || attempt.comboMaxChain > MAX_COMBO_CHAIN) {
+    return { valid: false, reason: `Combo max chain must be between 0 and ${MAX_COMBO_CHAIN}` }
+  }
+
+  // Validate final score
+  if (typeof attempt.finalScore !== 'number' || attempt.finalScore < 0 || attempt.finalScore > MAX_SCORE) {
+    return { valid: false, reason: `Final score must be between 0 and ${MAX_SCORE}` }
+  }
+
+  // Validate game version
+  if (!attempt.gameVersion || typeof attempt.gameVersion !== 'string') {
+    return { valid: false, reason: 'Invalid game version' }
+  }
+
+  // Business logic validation: if success is true, progress should be 100
+  if (attempt.success && attempt.finalProgress < 100) {
+    return { valid: false, reason: 'Successful attempts must have 100% progress' }
+  }
+
+  // Business logic: if failed, moves remaining should be 0
+  if (!attempt.success && attempt.movesRemaining > 0) {
+    return { valid: false, reason: 'Failed attempts with remaining moves are suspicious' }
+  }
+
+  return { valid: true }
 }

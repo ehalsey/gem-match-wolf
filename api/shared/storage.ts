@@ -1,7 +1,8 @@
 import { TableClient, AzureNamedKeyCredential } from '@azure/data-tables'
-import { ScoreEntity, LeaderboardEntry } from './types'
+import { ScoreEntity, LeaderboardEntry, LevelAttemptEntity } from './types'
 
 const TABLE_NAME = 'highscores'
+const LEVEL_ATTEMPTS_TABLE = 'levelattempts'
 
 let tableClient: TableClient | null = null
 
@@ -96,6 +97,82 @@ export async function getRecentSubmissionsForIP(ipHash: string, hours: number = 
   let count = 0
 
   const entities = client.listEntities<ScoreEntity>({
+    queryOptions: {
+      filter: `ipHash eq '${ipHash}' and timestamp ge datetime'${cutoffTime.toISOString()}'`
+    }
+  })
+
+  for await (const entity of entities) {
+    count++
+  }
+
+  return count
+}
+
+// Level Analytics Storage Functions
+let levelAttemptsClient: TableClient | null = null
+
+export function getLevelAttemptsTableClient(): TableClient {
+  if (levelAttemptsClient) {
+    return levelAttemptsClient
+  }
+
+  const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING
+
+  if (!connectionString) {
+    throw new Error('AZURE_STORAGE_CONNECTION_STRING is not set')
+  }
+
+  levelAttemptsClient = TableClient.fromConnectionString(connectionString, LEVEL_ATTEMPTS_TABLE)
+  return levelAttemptsClient
+}
+
+export async function ensureLevelAttemptsTableExists(): Promise<void> {
+  try {
+    const client = getLevelAttemptsTableClient()
+    await client.createTable()
+  } catch (error: any) {
+    // Table already exists - ignore error
+    if (error.statusCode !== 409) {
+      throw error
+    }
+  }
+}
+
+export async function saveLevelAttempt(attempt: LevelAttemptEntity): Promise<void> {
+  const client = getLevelAttemptsTableClient()
+  await ensureLevelAttemptsTableExists()
+
+  await client.createEntity({
+    partitionKey: attempt.partitionKey,
+    rowKey: attempt.rowKey,
+    levelNumber: attempt.levelNumber,
+    challengeType: attempt.challengeType,
+    challengeTarget: attempt.challengeTarget || '',
+    targetValue: attempt.targetValue,
+    success: attempt.success,
+    movesTaken: attempt.movesTaken,
+    movesRemaining: attempt.movesRemaining,
+    duration: attempt.duration,
+    finalProgress: attempt.finalProgress,
+    powerUpsUsed: attempt.powerUpsUsed,
+    comboMaxChain: attempt.comboMaxChain,
+    finalScore: attempt.finalScore,
+    gameVersion: attempt.gameVersion,
+    sessionId: attempt.sessionId || '',
+    ipHash: attempt.ipHash,
+    timestamp: attempt.timestamp
+  })
+}
+
+export async function getRecentLevelAttemptsForIP(ipHash: string, hours: number = 1): Promise<number> {
+  const client = getLevelAttemptsTableClient()
+  await ensureLevelAttemptsTableExists()
+
+  const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000)
+  let count = 0
+
+  const entities = client.listEntities<LevelAttemptEntity>({
     queryOptions: {
       filter: `ipHash eq '${ipHash}' and timestamp ge datetime'${cutoffTime.toISOString()}'`
     }

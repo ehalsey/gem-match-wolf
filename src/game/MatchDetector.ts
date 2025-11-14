@@ -26,8 +26,14 @@ export class MatchDetector {
 
     let i = 0
     while (i < line.length) {
+      // Skip null cells (for non-rectangular boards)
+      if (!line[i]) {
+        i++
+        continue
+      }
+
       let j = i + 1
-      while (j < line.length && line[j].color === line[i].color) {
+      while (j < line.length && line[j] && line[j].color === line[i].color) {
         j++
       }
 
@@ -48,7 +54,7 @@ export class MatchDetector {
    */
   static boardShouldExplode (board: Cell[][]): boolean {
     // Check for regular 3+ matches
-    const hasRegularMatches = board.some(row => row.some(cell => this.shouldExplode(cell, board)))
+    const hasRegularMatches = board.some(row => row.some(cell => cell !== null && this.shouldExplode(cell, board)))
 
     // Note: Special patterns check would go here if needed
     // const hasSpecialPatterns = this.detectSpecialPatterns(board).length > 0
@@ -60,6 +66,11 @@ export class MatchDetector {
    * Check if a cell should explode (is part of 3+ match)
    */
   static shouldExplode (cell: Cell, board: Cell[][]): boolean {
+    // Handle null cells (for non-rectangular boards)
+    if (!cell) {
+      return false
+    }
+
     // Power-ups don't explode as part of normal matches - they must be activated
     if (cell.powerup) {
       return false
@@ -78,7 +89,9 @@ export class MatchDetector {
       if (startPosition >= 0 && endPosition < size) {
         let explosion = true
         for (let index = startPosition; index < endPosition; index++) {
-          if (board[row][index].color !== board[row][index + 1].color) {
+          // Add null checks for cells that may not be initialized yet
+          if (!board[row][index] || !board[row][index + 1] ||
+              board[row][index].color !== board[row][index + 1].color) {
             explosion = false
             break
           }
@@ -102,7 +115,9 @@ export class MatchDetector {
       if (startPosition >= 0 && endPosition < size) {
         let explosion = true
         for (let index = startPosition; index < endPosition; index++) {
-          if (board[index][column].color !== board[index + 1][column].color) {
+          // Add null checks for cells that may not be initialized yet
+          if (!board[index][column] || !board[index + 1][column] ||
+              board[index][column].color !== board[index + 1][column].color) {
             explosion = false
             break
           }
@@ -126,7 +141,8 @@ export class MatchDetector {
       const topRight = board[row][column + 1]
       const bottomLeft = board[row + 1][column]
       const bottomRight = board[row + 1][column + 1]
-      if (!topRight.empty && !bottomLeft.empty && !bottomRight.empty &&
+      if (topRight && bottomLeft && bottomRight &&
+          !topRight.empty && !bottomLeft.empty && !bottomRight.empty &&
           topRight.color === color && bottomLeft.color === color && bottomRight.color === color) {
         return true
       }
@@ -137,7 +153,8 @@ export class MatchDetector {
       const topLeft = board[row][column - 1]
       const bottomLeft = board[row + 1][column - 1]
       const bottomRight = board[row + 1][column]
-      if (!topLeft.empty && !bottomLeft.empty && !bottomRight.empty &&
+      if (topLeft && bottomLeft && bottomRight &&
+          !topLeft.empty && !bottomLeft.empty && !bottomRight.empty &&
           topLeft.color === color && bottomLeft.color === color && bottomRight.color === color) {
         return true
       }
@@ -148,7 +165,8 @@ export class MatchDetector {
       const topLeft = board[row - 1][column]
       const topRight = board[row - 1][column + 1]
       const bottomRight = board[row][column + 1]
-      if (!topLeft.empty && !topRight.empty && !bottomRight.empty &&
+      if (topLeft && topRight && bottomRight &&
+          !topLeft.empty && !topRight.empty && !bottomRight.empty &&
           topLeft.color === color && topRight.color === color && bottomRight.color === color) {
         return true
       }
@@ -159,7 +177,8 @@ export class MatchDetector {
       const topLeft = board[row - 1][column - 1]
       const topRight = board[row - 1][column]
       const bottomLeft = board[row][column - 1]
-      if (!topLeft.empty && !topRight.empty && !bottomLeft.empty &&
+      if (topLeft && topRight && bottomLeft &&
+          !topLeft.empty && !topRight.empty && !bottomLeft.empty &&
           topLeft.color === color && topRight.color === color && bottomLeft.color === color) {
         return true
       }
