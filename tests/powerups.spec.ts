@@ -135,17 +135,25 @@ test('vertical rocket + vertical rocket combo clears column and row', async ({ p
     const firstCell = scene.board[3][4]
     const secondCell = scene.board[4][4]
 
-    // Trigger the combo: first rocket clears column, second clears row
+    // Swap cells first (like drag does)
+    scene.swapCells(firstCell, secondCell)
+
+    // After swap: firstCell is now at [4,4] (target), secondCell is at [3,4]
+    // Combo creates cross explosion at target location [4,4]
     const maybePromise = scene.triggerVerticalRocketCombo(firstCell, secondCell)
     if (maybePromise && typeof maybePromise.then === 'function') {
       await maybePromise
     }
 
-    // collect which cells in column 4 are empty (should all be empty)
-    const columnEmpty = scene.board.map((row: any) => !!row[4].empty)
+    // Process the destruction (combo only marks cells, need to actually destroy them)
+    await scene.destroyCells()
 
-    // collect which cells in row 4 are empty (should all be empty)
+    // Check cells are empty BEFORE refilling (refillBoard will add new gems)
+    const columnEmpty = scene.board.map((row: any) => !!row[4].empty)
     const rowEmpty = scene.board[4].map((c: any) => !!c.empty)
+
+    await scene.makeCellsFall()
+    await scene.refillBoard()
 
     return {
       columnEmpty,
@@ -153,10 +161,10 @@ test('vertical rocket + vertical rocket combo clears column and row', async ({ p
     }
   })
 
-  // expect the entire column 4 to be empty (first vertical rocket)
+  // expect the entire column 4 to be empty (cross explosion at target)
   expect(result.columnEmpty.every(Boolean)).toBeTruthy()
 
-  // expect the entire row 4 to be empty (second rocket triggered as horizontal)
+  // expect the entire row 4 to be empty (cross explosion at target)
   expect(result.rowEmpty.every(Boolean)).toBeTruthy()
 })
 
@@ -192,17 +200,25 @@ test('horizontal rocket + horizontal rocket combo clears row and column', async 
     const firstCell = scene.board[4][3]
     const secondCell = scene.board[4][4]
 
-    // Trigger the combo: first rocket clears row, second clears column
+    // Swap cells first (like drag does)
+    scene.swapCells(firstCell, secondCell)
+
+    // After swap: firstCell is now at [4,4] (target), secondCell is at [4,3]
+    // Combo creates cross explosion at target location [4,4]
     const maybePromise = scene.triggerHorizontalRocketCombo(firstCell, secondCell)
     if (maybePromise && typeof maybePromise.then === 'function') {
       await maybePromise
     }
 
-    // collect which cells in row 4 are empty (should all be empty)
-    const rowEmpty = scene.board[4].map((c: any) => !!c.empty)
+    // Process the destruction (combo only marks cells, need to actually destroy them)
+    await scene.destroyCells()
 
-    // collect which cells in column 4 are empty (should all be empty)
+    // Check cells are empty BEFORE refilling (refillBoard will add new gems)
+    const rowEmpty = scene.board[4].map((c: any) => !!c.empty)
     const columnEmpty = scene.board.map((row: any) => !!row[4].empty)
+
+    await scene.makeCellsFall()
+    await scene.refillBoard()
 
     return {
       rowEmpty,
@@ -210,9 +226,9 @@ test('horizontal rocket + horizontal rocket combo clears row and column', async 
     }
   })
 
-  // expect the entire row 4 to be empty (first horizontal rocket)
+  // expect the entire row 4 to be empty (cross explosion at target)
   expect(result.rowEmpty.every(Boolean)).toBeTruthy()
 
-  // expect the entire column 4 to be empty (second rocket triggered as vertical)
+  // expect the entire column 4 to be empty (cross explosion at target)
   expect(result.columnEmpty.every(Boolean)).toBeTruthy()
 })
