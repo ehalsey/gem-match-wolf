@@ -2024,20 +2024,16 @@ export default class GameScene extends Phaser.Scene {
     }
 
     console.log('🚀🚀 VERTICAL ROCKET + VERTICAL ROCKET COMBO!')
-    console.log(`First rocket (vertical) at [${firstCell.row}, ${firstCell.column}]`)
-    console.log(`Second rocket (will clear row ${secondCell.row}) at [${secondCell.row}, ${secondCell.column}]`)
+    console.log(`Cross explosion at [${firstCell.row}, ${firstCell.column}] (after swap - target location)`)
 
     // Play rocket sound
     this.sound.play('rocket', { volume: 0.4 })
 
-    // Create effects for both rockets
-    const x1 = firstCell.column * CELL_SIZE + CELL_SIZE / 2
-    const y1 = firstCell.row * CELL_SIZE + CELL_SIZE / 2
-    this.createPowerUpEffect(x1, y1, 'vertical-rocket', firstCell)
-
-    const x2 = secondCell.column * CELL_SIZE + CELL_SIZE / 2
-    const y2 = secondCell.row * CELL_SIZE + CELL_SIZE / 2
-    this.createPowerUpEffect(x2, y2, 'horizontal-rocket', secondCell)
+    // Create effects at TARGET location (firstCell is now at target after swap)
+    const x = firstCell.column * CELL_SIZE + CELL_SIZE / 2
+    const y = firstCell.row * CELL_SIZE + CELL_SIZE / 2
+    this.createPowerUpEffect(x, y, 'vertical-rocket', firstCell)
+    this.createPowerUpEffect(x, y, 'horizontal-rocket', firstCell)
 
     // Clear both powerup properties
     firstCell.powerup = null
@@ -2047,9 +2043,10 @@ export default class GameScene extends Phaser.Scene {
     this.markCellForDestructionImmediate(firstCell)
     this.markCellForDestructionImmediate(secondCell)
 
-    // Destroy entire column (from first rocket)
+    // Destroy entire column at TARGET position (firstCell.column after swap)
     for (let row = 0; row < size; row++) {
       const targetCell = this.board[row][firstCell.column]
+      if (!targetCell) continue // Null safety for non-rectangular boards
       if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
         console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
         await this.triggerPowerUp(targetCell)
@@ -2058,9 +2055,10 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Destroy entire row (from second rocket)
+    // Destroy entire row at TARGET position (firstCell.row after swap)
     for (let col = 0; col < size; col++) {
-      const targetCell = this.board[secondCell.row][col]
+      const targetCell = this.board[firstCell.row][col]
+      if (!targetCell) continue // Null safety for non-rectangular boards
       if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
         console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
         await this.triggerPowerUp(targetCell)
@@ -2079,20 +2077,16 @@ export default class GameScene extends Phaser.Scene {
     }
 
     console.log('🚀🚀 HORIZONTAL ROCKET + HORIZONTAL ROCKET COMBO!')
-    console.log(`First rocket (horizontal) at [${firstCell.row}, ${firstCell.column}]`)
-    console.log(`Second rocket (will clear column ${secondCell.column}) at [${secondCell.row}, ${secondCell.column}]`)
+    console.log(`Cross explosion at [${firstCell.row}, ${firstCell.column}] (after swap - target location)`)
 
     // Play rocket sound
     this.sound.play('rocket', { volume: 0.4 })
 
-    // Create effects for both rockets
-    const x1 = firstCell.column * CELL_SIZE + CELL_SIZE / 2
-    const y1 = firstCell.row * CELL_SIZE + CELL_SIZE / 2
-    this.createPowerUpEffect(x1, y1, 'horizontal-rocket', firstCell)
-
-    const x2 = secondCell.column * CELL_SIZE + CELL_SIZE / 2
-    const y2 = secondCell.row * CELL_SIZE + CELL_SIZE / 2
-    this.createPowerUpEffect(x2, y2, 'vertical-rocket', secondCell)
+    // Create effects at TARGET location (firstCell is now at target after swap)
+    const x = firstCell.column * CELL_SIZE + CELL_SIZE / 2
+    const y = firstCell.row * CELL_SIZE + CELL_SIZE / 2
+    this.createPowerUpEffect(x, y, 'horizontal-rocket', firstCell)
+    this.createPowerUpEffect(x, y, 'vertical-rocket', firstCell)
 
     // Clear both powerup properties
     firstCell.powerup = null
@@ -2102,9 +2096,10 @@ export default class GameScene extends Phaser.Scene {
     this.markCellForDestructionImmediate(firstCell)
     this.markCellForDestructionImmediate(secondCell)
 
-    // Destroy entire row (from first rocket)
+    // Destroy entire row at TARGET position (firstCell.row after swap)
     for (let col = 0; col < size; col++) {
       const targetCell = this.board[firstCell.row][col]
+      if (!targetCell) continue // Null safety for non-rectangular boards
       if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
         console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
         await this.triggerPowerUp(targetCell)
@@ -2113,9 +2108,10 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Destroy entire column (from second rocket)
+    // Destroy entire column at TARGET position (firstCell.column after swap)
     for (let row = 0; row < size; row++) {
-      const targetCell = this.board[row][secondCell.column]
+      const targetCell = this.board[row][firstCell.column]
+      if (!targetCell) continue // Null safety for non-rectangular boards
       if (targetCell.powerup && targetCell !== firstCell && targetCell !== secondCell) {
         console.log(`Chain-activating ${targetCell.powerup} at [${targetCell.row}, ${targetCell.column}]`)
         await this.triggerPowerUp(targetCell)
@@ -2501,12 +2497,18 @@ export default class GameScene extends Phaser.Scene {
         // Left cell
         const leftCol = cell.column - distance
         if (leftCol >= 0) {
-          cellsAtDistance.push(this.board[cell.row][leftCol])
+          const leftCell = this.board[cell.row][leftCol]
+          if (leftCell) { // Null safety for non-rectangular boards
+            cellsAtDistance.push(leftCell)
+          }
         }
         // Right cell
         const rightCol = cell.column + distance
         if (rightCol < size) {
-          cellsAtDistance.push(this.board[cell.row][rightCol])
+          const rightCell = this.board[cell.row][rightCol]
+          if (rightCell) { // Null safety for non-rectangular boards
+            cellsAtDistance.push(rightCell)
+          }
         }
       }
 
@@ -2572,12 +2574,18 @@ export default class GameScene extends Phaser.Scene {
         // Up cell
         const upRow = cell.row - distance
         if (upRow >= 0) {
-          cellsAtDistance.push(this.board[upRow][cell.column])
+          const upCell = this.board[upRow][cell.column]
+          if (upCell) { // Null safety for non-rectangular boards
+            cellsAtDistance.push(upCell)
+          }
         }
         // Down cell
         const downRow = cell.row + distance
         if (downRow < size) {
-          cellsAtDistance.push(this.board[downRow][cell.column])
+          const downCell = this.board[downRow][cell.column]
+          if (downCell) { // Null safety for non-rectangular boards
+            cellsAtDistance.push(downCell)
+          }
         }
       }
 
